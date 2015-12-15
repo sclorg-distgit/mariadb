@@ -1,35 +1,23 @@
-diff -up mariadb-5.5.40/mysql.init.scl-env-check mariadb-5.5.40/mysql.init
---- mariadb-5.5.40/mysql.init.scl-env-check	2014-11-06 17:00:58.921763727 +0000
-+++ mariadb-5.5.40/mysql.init	2014-11-06 17:32:24.941674559 +0000
-@@ -1,7 +1,7 @@
- #!/bin/sh
- #
--# mysqld	This shell script takes care of starting and stopping
--#		the MySQL subsystem (mysqld).
-+# __SCL_NAME__-mysqld	This shell script takes care of starting and stopping
-+#                       the MySQL subsystem (mysqld).
- #
- # chkconfig: - 64 36
- # description:	MySQL database server.
-@@ -9,7 +9,7 @@
- # config: /etc/my.cnf
- # pidfile: /var/run/mysqld/mysqld.pid
- ### BEGIN INIT INFO
--# Provides: mysqld
-+# Provides: __SCL_NAME__-mysqld
- # Required-Start: $local_fs $remote_fs $network $named $syslog $time
- # Required-Stop: $local_fs $remote_fs $network $named $syslog $time
- # Short-Description: start and stop MySQL server
-@@ -24,7 +24,7 @@
+diff -up mariadb-10.0.17/scripts/mysqld_safe.sh.scl-env-check mariadb-10.0.17/scripts/mysqld_safe.sh
+--- mariadb-10.0.17/scripts/mysqld_safe.sh.scl-env-check	2015-02-25 16:40:55.000000000 +0100
++++ mariadb-10.0.17/scripts/mysqld_safe.sh	2015-03-14 12:49:01.693320701 +0100
+@@ -11,6 +11,12 @@
+ # mysql.server works by first doing a cd to the base directory and from there
+ # executing mysqld_safe
  
- 
- exec="/usr/bin/mysqld_safe"
--prog="mysqld"
-+prog="__SCL_NAME__-mysqld"
- 
- # Set timeouts here so they can be overridden from /etc/sysconfig/mysqld
- STARTTIMEOUT=120
-@@ -233,6 +233,18 @@ condrestart(){
++# we want start daemon only inside "scl enable" invocation
++if ! scl_enabled @SCL_NAME@ ; then
++    echo "Use \"scl enable @SCL_NAME@ 'service ...'\" invocation"
++    exit 1
++fi
++
+ # Initialize script globals
+ KILL_MYSQLD=1;
+ MYSQLD=
+diff -up mariadb-10.0.17/scripts/mysql.init.in.scl-env-check mariadb-10.0.17/scripts/mysql.init.in
+--- mariadb-10.0.17/scripts/mysql.init.in.scl-env-check	2015-03-14 12:49:01.693320701 +0100
++++ mariadb-10.0.17/scripts/mysql.init.in	2015-03-14 12:49:01.693320701 +0100
+@@ -154,6 +154,18 @@ condrestart(){
      [ -e $lockfile ] && restart || :
  }
  
@@ -37,70 +25,54 @@ diff -up mariadb-5.5.40/mysql.init.scl-env-check mariadb-5.5.40/mysql.init
 +# clears almost all environment variables.
 +# Since X_SCLS is cleared as well, we lose information about other
 +# collections enabled.
-+source __SCL_SCRIPTS__/service-environment
-+source scl_source enable $MARIADB55_SCLS_ENABLED
++source @SCL_SCRIPTS@/service-environment
++source scl_source enable $@SCL_NAME_UPPER@_SCLS_ENABLED
 +
 +# we want start daemon only inside "scl enable" invocation
-+if ! scl_enabled __SCL_NAME__ ; then
-+    echo "Collection __SCL_NAME__ has to be listed in __SCL_SCRIPTS__/service-environment"
++if ! scl_enabled @SCL_NAME@ ; then
++    echo "Collection @SCL_NAME@ has to be listed in @SCL_SCRIPTS@/service-environment"
 +    exit 1
 +fi
  
  # See how we were called.
  case "$1" in
-diff -up mariadb-5.5.40/scripts/mysqld_safe.sh.scl-env-check mariadb-5.5.40/scripts/mysqld_safe.sh
---- mariadb-5.5.40/scripts/mysqld_safe.sh.scl-env-check	2014-10-08 14:19:52.000000000 +0100
-+++ mariadb-5.5.40/scripts/mysqld_safe.sh	2014-11-06 17:32:24.941674559 +0000
-@@ -11,6 +11,12 @@
- # mysql.server works by first doing a cd to the base directory and from there
- # executing mysqld_safe
- 
-+# we want start daemon only inside "scl enable" invocation
-+if ! scl_enabled __SCL_NAME__ ; then
-+    echo "Use \"scl enable __SCL_NAME__ 'service ...'\" invocation"
-+    exit 1
-+fi
-+
- # Initialize script globals
- KILL_MYSQLD=1;
- MYSQLD=
-diff -up mariadb-5.5.40/scripts/mysql_install_db.sh.scl-env-check mariadb-5.5.40/scripts/mysql_install_db.sh
---- mariadb-5.5.40/scripts/mysql_install_db.sh.scl-env-check	2014-10-08 14:19:52.000000000 +0100
-+++ mariadb-5.5.40/scripts/mysql_install_db.sh	2014-11-06 17:39:23.059648300 +0000
+diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.17/scripts/mysql_install_db.sh
+--- mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check	2015-03-14 12:49:00.319319690 +0100
++++ mariadb-10.0.17/scripts/mysql_install_db.sh	2015-03-14 12:49:01.694320701 +0100
 @@ -19,6 +19,12 @@
  #
  # All unrecognized arguments to this script are passed to mysqld.
  
 +# we want start daemon only inside "scl enable" invocation
-+if ! scl_enabled __SCL_NAME__ ; then
-+    echo "Use \"scl enable __SCL_NAME__ 'service ...'\" invocation"
++if ! scl_enabled @SCL_NAME@ ; then
++    echo "Use \"scl enable @SCL_NAME@ 'service ...'\" invocation"
 +    exit 1
 +fi
 +
  basedir=""
  builddir=""
  ldata="@localstatedir@"
-@@ -436,16 +442,16 @@ else
+@@ -435,16 +441,16 @@ else
    echo "The problem could be conflicting information in an external"
    echo "my.cnf files. You can ignore these by doing:"
    echo
 -  echo "    shell> $scriptdir/scripts/mysql_install_db --defaults-file=~/.my.cnf"
-+  echo "    shell> su -s /bin/bash - mysql -c 'scl enable __SCL_NAME__ -- $scriptdir/scripts/mysql_install_db --defaults-file=~/.my.cnf'"
++  echo "    shell> su -s /bin/bash - mysql -c 'scl enable @SCL_NAME@ -- $scriptdir/scripts/mysql_install_db --defaults-file=~/.my.cnf'"
    echo
    echo "You can also try to start the mysqld daemon with:"
    echo
 -  echo "    shell> $mysqld --skip-grant --general-log &"
-+  echo "    shell> su -s /bin/bash - mysql -c 'scl enable __SCL_NAME__ -- $mysqld --skip-grant --general-log &"
++  echo "    shell> su -s /bin/bash - mysql -c 'scl enable @SCL_NAME@ -- $mysqld --skip-grant --general-log &'"
    echo
    echo "and use the command line tool $bindir/mysql"
    echo "to connect to the mysql database and look at the grant tables:"
    echo
 -  echo "    shell> $bindir/mysql -u root mysql"
-+  echo "    shell> scl enable __SCL_NAME__ -- $bindir/mysql -u root mysql"
++  echo "    shell> scl enable @SCL_NAME@ -- $bindir/mysql -u root mysql"
    echo "    mysql> show tables;"
    echo
    echo "Try 'mysqld --help' if you have problems with paths.  Using"
-@@ -475,19 +481,15 @@ fi
+@@ -474,19 +480,15 @@ fi
  # the screen.
  if test "$cross_bootstrap" -eq 0 && test -z "$srcdir"
  then
@@ -114,26 +86,67 @@ diff -up mariadb-5.5.40/scripts/mysql_install_db.sh.scl-env-check mariadb-5.5.40
    echo
 -  echo "'$bindir/mysqladmin' -u root password 'new-password'"
 -  echo "'$bindir/mysqladmin' -u root -h $hostname password 'new-password'"
-+  echo "scl enable __SCL_NAME__ -- '$bindir/mysqladmin' -u root password 'new-password'"
-+  echo "scl enable __SCL_NAME__ -- '$bindir/mysqladmin' -u root -h $hostname password 'new-password'"
++  echo "scl enable @SCL_NAME@ -- '$bindir/mysqladmin' -u root password 'new-password'"
++  echo "scl enable @SCL_NAME@ -- '$bindir/mysqladmin' -u root -h $hostname password 'new-password'"
    echo
    echo "Alternatively you can run:"
 -  echo "'$bindir/mysql_secure_installation'"
-+  echo "scl enable __SCL_NAME__ -- '$bindir/mysql_secure_installation'"
++  echo "scl enable @SCL_NAME@ -- '$bindir/mysql_secure_installation'"
    echo
    echo "which will also give you the option of removing the test"
    echo "databases and anonymous user created by default.  This is"
-@@ -500,10 +502,11 @@ then
-   then
-     echo
-     echo "You can start the MariaDB daemon with:"
--    echo "cd '$basedir' ; $bindir/mysqld_safe --datadir='$ldata'"
-+    echo "service __SCL_NAME__-mysqld start"
+@@ -502,7 +504,8 @@ then
+     echo "cd '$basedir' ; $bindir/mysqld_safe --datadir='$ldata'"
      echo
      echo "You can test the MariaDB daemon with mysql-test-run.pl"
 -    echo "cd '$basedir/mysql-test' ; perl mysql-test-run.pl"
-+    echo "after installing __SCL_NAME__-mariadb-test package."
++    echo "after installing @SCL_NAME@-mariadb-test package."
 +    echo "See @prefix@/share/mysql-test/README for instructions."
    fi
  
    echo
+diff -up mariadb-10.0.17/scripts/mysql.service.in.scl-env-check mariadb-10.0.17/scripts/mysql.service.in
+--- mariadb-10.0.17/scripts/mysql.service.in.scl-env-check	2015-03-14 12:49:01.594320628 +0100
++++ mariadb-10.0.17/scripts/mysql.service.in	2015-03-14 16:06:28.582056853 +0100
+@@ -32,14 +32,20 @@ Type=simple
+ User=mysql
+ Group=mysql
+ 
+-ExecStartPre=@libexecdir@/mysql-check-socket
+-ExecStartPre=@libexecdir@/mysql-prepare-db-dir %n
++# Load collections set to enabled for this service
++EnvironmentFile=@SCL_SCRIPTS@/service-environment
++
++# We want to start server only inside "scl enable" invocation
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- /usr/bin/scl_enabled @SCL_NAME@
++
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir %n
+ # Note: we set --basedir to prevent probes that might trigger SELinux alarms,
+ # per bug #547485
+-ExecStart=@bindir@/mysqld_safe --basedir=@prefix@
+-ExecStartPost=@libexecdir@/mysql-wait-ready $MAINPID
+-ExecStartPost=@libexecdir@/mysql-check-upgrade
+-ExecStopPost=@libexecdir@/mysql-wait-stop
++ExecStart=@libexecdir@/mysqld_safe-scl-helper enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @bindir@/mysqld_safe --basedir=@prefix@
++ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-ready $MAINPID
++ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade
++ExecStopPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-stop
+ 
+ # Give a reasonable amount of time for the server to start up/shut down
+ TimeoutSec=300
+diff -up mariadb-10.0.17/support-files/mysql-log-rotate.sh.scl-env-check mariadb-10.0.17/support-files/mysql-log-rotate.sh
+--- mariadb-10.0.17/support-files/mysql-log-rotate.sh.scl-env-check	2015-03-14 12:49:00.278319660 +0100
++++ mariadb-10.0.17/support-files/mysql-log-rotate.sh	2015-03-14 12:49:01.694320701 +0100
+@@ -30,9 +30,9 @@
+ #    postrotate
+ #	# just if mysqld is really running
+ #	if test -x @bindir@/mysqladmin && \
+-#	   @bindir@/mysqladmin ping &>/dev/null
++#	   /usr/bin/scl enable @SCL_NAME@ -- @bindir@/mysqladmin ping &>/dev/null
+ #	then
+-#	   @bindir@/mysqladmin flush-logs
++#	   /usr/bin/scl enable @SCL_NAME@ -- @bindir@/mysqladmin flush-logs
+ #	fi
+ #    endscript
+ #}
