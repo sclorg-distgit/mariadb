@@ -1,0 +1,21 @@
+diff -up mariadb-10.0.15/scripts/mysql_config.sh.noclientlib mariadb-10.0.15/scripts/mysql_config.sh
+--- mariadb-10.0.15/scripts/mysql_config.sh.noclientlib	2015-01-26 18:04:45.236883879 +0100
++++ mariadb-10.0.15/scripts/mysql_config.sh	2015-01-26 18:06:03.061101206 +0100
+@@ -164,8 +164,6 @@ Usage: $0 [OPTIONS]
+ Options:
+         --cflags         [$cflags]
+         --include        [$include]
+-        --libs           [$libs]
+-        --libs_r         [$libs_r]
+         --plugindir      [$plugindir]
+         --socket         [$socket]
+         --port           [$port]
+@@ -185,8 +183,6 @@ while test $# -gt 0; do
+         case $1 in
+         --cflags)  echo "$cflags" ;;
+         --include) echo "$include" ;;
+-        --libs)    echo "$libs" ;;
+-        --libs_r)  echo "$libs_r" ;;
+         --plugindir) echo "$plugindir" ;;
+         --socket)  echo "$socket" ;;
+         --port)    echo "$port" ;;
