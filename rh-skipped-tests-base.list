@@ -1,0 +1,9 @@
+# Disable innodb.innodb, which is showing platform-dependent results
+# as of 5.5.9.  Upstream at http://bugs.mysql.com/bug.php?id=60155
+
+innodb.innodb             : bug#60155 has platform-dependent results
+
+# Disable tokudb_innodb_xa_crash temporarily, until it is fixed:
+#
+
+tokudb_innodb_xa_crash    : https://bugzilla.redhat.com/show_bug.cgi?id=1018192

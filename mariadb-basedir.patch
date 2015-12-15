@@ -1,0 +1,15 @@
+Don't guess basedir in mysql_config; we place it under _libdir because
+of multilib conflicts, so use rather configured @prefix@ path directly.
+
+diff -up mariadb-5.5.40/scripts/mysql_config.sh.p14 mariadb-5.5.40/scripts/mysql_config.sh
+--- mariadb-5.5.40/scripts/mysql_config.sh.p14	2014-09-04 07:54:41.378332895 +0200
++++ mariadb-5.5.40/scripts/mysql_config.sh	2014-09-04 07:55:24.633788157 +0200
+@@ -77,7 +77,7 @@ get_full_path ()
+ me=`get_full_path $0`
+ 
+ # Script might have been renamed but assume mysql_<something>config<something>
+-basedir=`echo $me | sed -e 's;/bin/mysql_.*config.*;;'`
++basedir='@prefix@'
+ 
+ ldata='@localstatedir@'
+ execdir='@libexecdir@'

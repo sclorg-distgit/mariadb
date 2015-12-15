@@ -1,0 +1,51 @@
+#!/bin/sh
+
+# This script waits for mysqld to be properly stopped
+# (which can be many seconds in some large load).
+# Running this as ExecStopPost is useful so that starting which is done
+# as part of restart doesn't see the former process still running.
+
+# extract value of a MySQL option from config files
+# Usage: get_mysql_option SECTION VARNAME DEFAULT
+# result is returned in $result
+# We use my_print_defaults which prints all options from multiple files,
+# with the more specific ones later; hence take the last match.
+get_mysql_option(){
+        result=`/usr/bin/my_print_defaults "$1" | sed -n "s/^--$2=//p" | tail -n 1`
+        if [ -z "$result" ]; then
+            # not found, use default
+            result="$3"
+        fi
+}
+
+# Defaults here had better match what mysqld_safe will default to
+get_mysql_option mysqld_safe pid-file "`hostname`.pid"
+pidfile="$result"
+
+# Wait for the server to properly end the main server
+ret=0
+TIMEOUT=60
+SECONDS=0
+
+if ! [ -f "$pidfile" ]; then
+	exit 1
+fi
+
+MYSQLPID=`cat "$pidfile" 2>/dev/null`
+if [ -z "$MYSQLPID" ] ; then
+	exit 2
+fi
+
+while /bin/true; do
+	# Check process still exists
+	if ! [ -d "/proc/${MYSQLPID}" ] ; then
+	    break
+	fi
+	if [ $SECONDS -gt $TIMEOUT ] ; then
+	    ret=3
+	    break
+	fi
+	sleep 1
+done
+
+exit $ret
