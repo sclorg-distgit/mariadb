@@ -26,13 +26,10 @@ Source5: my_config.h
 Source6: README.mysql-docs
 Source7: README.mysql-license
 Source8: libmysql.version
-Source10: mariadb.tmpfiles.d
-Source11: mariadb.service
-Source12: mysqld-prepare-db-dir
-Source13: mysqld-wait-ready
 Source14: rh-skipped-tests-base.list
 Source15: rh-skipped-tests-arm.list
-Source16: mysqld-wait-stop
+# Working around perl dependency checking bug in rpm FTTB. Remove later.
+Source17: mysql.init
 # We need to document how depended packages should be biult
 Source18: README.mariadb-devel
 Source998: filter-provides-mysql.sh
@@ -52,15 +49,16 @@ Patch11: mariadb-string-overflow.patch
 Patch14: mariadb-basedir.patch
 Patch15: mariadb-covscan-signexpr.patch
 Patch16: mariadb-covscan-stroverflow.patch
-Patch17: mariadb-ssltest.patch
 Patch101: mariadb-scl-env-check.patch
 
+BuildRoot: %{_tmppath}/%{name}-%{version}-%{release}-root
 BuildRequires: perl, readline-devel, openssl-devel
 BuildRequires: cmake, ncurses-devel, zlib-devel, libaio-devel
-BuildRequires: systemd, systemtap-sdt-devel
-BuildRequires: pam-devel
+BuildRequires: systemtap-sdt-devel
 # make test requires time and ps
 BuildRequires: time procps
+# auth_pam.so plugin will be build if pam-devel is installed
+BuildRequires: pam-devel
 # perl modules needed to run regression tests
 BuildRequires: perl(Socket), perl(Time::HiRes)
 BuildRequires: perl(Data::Dumper), perl(Test::More), perl(Env)
@@ -118,14 +116,7 @@ Requires: /usr/bin/scl_source
 # we need fuser utility from psmisc to check unix socket
 Requires: psmisc
 Requires(pre): /usr/sbin/useradd
-# we need fuser utility from psmisc to check unix socket
-Requires: psmisc
-# We require this to be present for %%{_prefix}/lib/tmpfiles.d
-Requires: systemd
-# Make sure it's there when scriptlets run, too
-Requires(post): systemd
-Requires(preun): systemd
-Requires(postun): systemd
+Requires(post): policycoreutils
 # mysqlhotcopy needs DBI/DBD support
 Requires: perl-DBI, perl-DBD-MySQL
 %{?scl:Requires:%scl_runtime}
@@ -196,7 +187,6 @@ MariaDB is a community developed branch of MySQL.
 %patch14 -p1
 %patch15 -p1
 %patch16 -p1
-%patch17 -p1
 
 # path fixes in source for dsc - using sed instead of patching, 
 # because we would need various patches for various collections
@@ -210,7 +200,7 @@ sed -i -e 's|/var/log/mysqld.log|%{log_path}|g' support-files/mysql-log-rotate.s
 # path adding collection name into some scripts
 # patch is applied only if building into SCL
 # some values in patch are replaced by real value depending on collection name
-cp -p %{SOURCE11} mariadb.service
+cp -p %{SOURCE17} mysql.init
 %if 0%{?scl:1}
 %global scl_sed_patches 1
 %if %scl_sed_patches
@@ -336,13 +326,15 @@ done
     cd mysql-test
     perl ./mysql-test-run.pl --force --retry=0 \
 	--skip-test-list=rh-skipped-tests.list \
-	--suite-timeout=720 --testcase-timeout=30
+	--suite-timeout=720 --testcase-timeout=30 || :
     # cmake build scripts will install the var cruft if left alone :-(
     rm -rf var
   ) 
 %endif
 
 %install
+rm -rf $RPM_BUILD_ROOT
+
 make DESTDIR=$RPM_BUILD_ROOT install
 
 # List the installed tree for RPM package maintenance purposes.
@@ -386,34 +378,6 @@ sed    -e 's|datadir=/var/|datadir=%{?_scl_root}/var/|g' \
        -e 's|pid-file=/var/|pid-file=%{?_scl_root}/var/|g' >my.cnf <%{SOURCE3}
 install -p -m 0644 my.cnf $RPM_BUILD_ROOT%{_sysconfdir}/my.cnf
 
-# install systemd unit files and scripts for handling server startup
-# and fix path definitions in the scripts
-mkdir -p ${RPM_BUILD_ROOT}%{_unitdir}
-sed -i -e 's|/usr/libexec|%{_libexecdir}|' \
-       -e 's|/usr/bin/mysqld_safe --basedir=/usr|%{_bindir}/mysqld_safe --basedir=%{_prefix}|' mariadb.service
-install -m 644 mariadb.service ${RPM_BUILD_ROOT}%{_unitdir}/%{service_name}.service
-
-sed    -e 's|/usr|%{_prefix}|' \
-       -e 's|/var|%{?_scl_root}/var|' \
-        -e 's|/etc|%{_sysconfdir}|' <%{SOURCE12} >mysqld-prepare-db-dir
-install -m 755 mysqld-prepare-db-dir ${RPM_BUILD_ROOT}%{_libexecdir}/
-
-sed -e 's|/etc/my.cnf|%{_sysconfdir}/my.cnf|' \
-       -e 's|/usr|%{_prefix}|' \
-       -e 's|/var/lib/|%{?_scl_root}/var/lib/|' \
-       -e 's|get_mysql_option mysqld socket "$datadir/mysql.sock"|get_mysql_option mysqld socket "/var/lib/mysql/mysql.sock"|' \
-       <%{SOURCE13} >mysqld-wait-ready
-install -m 755 mysqld-wait-ready ${RPM_BUILD_ROOT}%{_libexecdir}/
-
-sed -e 's|/etc/my.cnf|%{_sysconfdir}/my.cnf|' \
-       -e 's|/usr|%{_prefix}|' \
-       <%{SOURCE16} >mysqld-wait-stop
-install -m 755 mysqld-wait-stop ${RPM_BUILD_ROOT}%{_libexecdir}/
-
-mkdir -p $RPM_BUILD_ROOT%{?scl:%_root_prefix}%{!?scl:%_prefix}/lib/tmpfiles.d
-sed -e 's|/var/run/mysqld|%{?_scl_root}/var/run/mysqld|' <%{SOURCE10} >%{?scl_prefix}mariadb.conf
-install -m 0644 %{?scl_prefix}mariadb.conf $RPM_BUILD_ROOT%{?scl:%_root_prefix}%{!?scl:%_prefix}/lib/tmpfiles.d/%{?scl_prefix}mariadb.conf
-
 mkdir -p $RPM_BUILD_ROOT%{?_scl_root}/var/lock/subsys/
 mkdir -p $RPM_BUILD_ROOT%{?_scl_root}/var/run/mysqld
 install -m 0755 -d $RPM_BUILD_ROOT%{?_scl_root}/var/lib/mysql
@@ -422,6 +386,18 @@ install -m 0755 -d $RPM_BUILD_ROOT%{?_scl_root}/var/lib/mysql
 %if 0%{?scl:1}
 install -m 0755 -d $RPM_BUILD_ROOT/var/lib/mysql
 %endif
+
+mkdir -p $RPM_BUILD_ROOT%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/rc.d/init.d
+sed -i -e 's|/etc/my.cnf|%{_sysconfdir}/my.cnf|g' \
+       -e 's|/etc/sysconfig/mysqld|%{_sysconfdir}/sysconfig/mysqld|g' \
+       -e 's|/etc/sysconfig/\$prog|%{_sysconfdir}/sysconfig/\$prog|g' \
+       -e 's|/var/run/mysqld/|%{?_scl_root}/var/run/mysqld/|g' \
+       -e 's|/usr|%{_prefix}|g' \
+       -e 's|/var/lock/|%{?_scl_root}/var/lock/|g' \
+       -e 's|/var/lib/|%{?_scl_root}/var/lib/|g' \
+       -e 's|/var/log/mysqld.log|/%{log_path}|g' \
+       -e 's|get_mysql_option mysqld socket "$datadir/mysql.sock"|get_mysql_option mysqld socket "/var/lib/mysql/mysql.sock"|g' mysql.init
+install -p -m 0755 mysql.init $RPM_BUILD_ROOT%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/rc.d/init.d/%{service_name}
 
 # Fix scripts for multilib safety
 mv ${RPM_BUILD_ROOT}%{_bindir}/mysql_config ${RPM_BUILD_ROOT}%{_libdir}/mysql/mysql_config
@@ -503,23 +479,37 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/doc/EXCEPTIONS-CLIENT
 # we don't care about scripts for solaris
 rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 
+%clean
+rm -rf $RPM_BUILD_ROOT
+
 %pre server
 /usr/sbin/groupadd -g 27 -o -r mysql >/dev/null 2>&1 || :
 /usr/sbin/useradd -M -N -g mysql -o -r -d /var/lib/mysql -s /bin/bash \
 	-c "MariaDB Server" -u 27 mysql >/dev/null 2>&1 || :
 
 %post server
-%systemd_post %{service_name}.service
+restorecon -R %{_scl_root} >/dev/null 2>&1 || :
+restorecon /etc/rc.d/init.d/%{service_name} >/dev/null 2>&1 || :
+if [ $1 = 1 ]; then
+    /sbin/chkconfig --add %{?scl_prefix}mysqld
+fi
 /bin/chmod 0755 %{?_scl_root}/var/lib/mysql
 /bin/touch %{log_path}
+restorecon %{log_path} >/dev/null 2>&1 || :
 
 %preun server
-%systemd_preun %{service_name}.service
+if [ $1 = 0 ]; then
+    /sbin/service %{?scl_prefix}mysqld stop >/dev/null 2>&1
+    /sbin/chkconfig --del %{?scl_prefix}mysqld
+fi
 
 %postun server
-%systemd_postun_with_restart %{service_name}.service
+if [ $1 -ge 1 ]; then
+    /sbin/service %{?scl_prefix}mysqld condrestart >/dev/null 2>&1 || :
+fi
 
 %files
+%defattr(-,root,root)
 %doc README COPYING COPYING.LESSER README.mysql-license EXCEPTIONS-CLIENT
 %doc storage/innobase/COPYING.Percona storage/innobase/COPYING.Google
 %doc README.mysql-docs
@@ -566,6 +556,7 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 %config(noreplace) %{_sysconfdir}/my.cnf.d/client.cnf
 
 %files libs
+%defattr(-,root,root)
 %doc README COPYING COPYING.LESSER README.mysql-license
 %doc storage/innobase/COPYING.Percona storage/innobase/COPYING.Google
 # although the default my.cnf contains only server settings, we put it in the
@@ -602,6 +593,7 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 %{_datadir}/mysql/charsets
 
 %files server
+%defattr(-,root,root)
 %doc support-files/*.cnf
 
 %{_bindir}/myisamchk
@@ -680,11 +672,7 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 %{_datadir}/mysql/mysql_performance_tables.sql
 %{_datadir}/mysql/my-*.cnf
 
-%{_unitdir}/%{service_name}.service
-%{_libexecdir}/mysqld-prepare-db-dir
-%{_libexecdir}/mysqld-wait-ready
-%{_libexecdir}/mysqld-wait-stop
-%{?scl:%_root_prefix}%{!?scl:%_prefix}/lib/tmpfiles.d/%{?scl_prefix}mariadb.conf
+%{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/rc.d/init.d/%{service_name}
 
 %attr(0755,mysql,mysql) %dir %{?_scl_root}/var/run/mysqld
 %attr(0755,mysql,mysql) %dir %{?_scl_root}/var/lib/mysql
@@ -695,14 +683,17 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 %config(noreplace) %{?scl:%_root_sysconfdir}%{!?scl:%_sysconfdir}/logrotate.d/%{service_name}
 
 %files devel
+%defattr(-,root,root)
 %doc README.mariadb-devel
 %{_includedir}/mysql
 %{_datadir}/aclocal/mysql.m4
  
 %files bench
+%defattr(-,root,root)
 %{_datadir}/sql-bench
 
 %files test
+%defattr(-,root,root)
 %{_bindir}/mysql_client_test
 %{_bindir}/my_safe_process
 %attr(-,mysql,mysql) %{_datadir}/mysql-test
@@ -715,7 +706,7 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
   Also fix: CVE-2015-0501 CVE-2015-2568 CVE-2015-0499 CVE-2015-2571
   CVE-2015-0433 CVE-2015-0441 CVE-2015-0505 CVE-2015-2573 CVE-2015-2582
   CVE-2015-2620 CVE-2015-2643 CVE-2015-2648 CVE-2015-4737 CVE-2015-4752
-  CVE-2015-4757 
+  CVE-2015-4757
   Resolves: #1247027
 
 * Thu Jan 29 2015 Honza Horak <hhorak@redhat.com> - 5.5.41-12
@@ -744,17 +735,15 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
   CVE-2014-2431 CVE-2014-2430 CVE-2014-2436 CVE-2014-2438 CVE-2014-2419
   Resolves: #1089366
 
-* Fri Mar 28 2014 Honza Horak <hhorak@redhat.com> - 5.5.36-8
-- Remove unnecessary perl provides
-  Related: #1042875
+* Mon Mar 31 2014 Honza Horak <hhorak@redhat.com> - 5.5.36-8
+- Rebuild due scl-utils provides/requires change
+  Related: #1056457
 
 * Thu Mar 27 2014 Honza Horak <hhorak@redhat.com> - 5.5.35-7
 - Use correct path to tmp dir
   Related: #1056457
 - Rebase to 5.5.36
   https://kb.askmonty.org/en/mariadb-5536-changelog/
-- Wait for daemon ends
-  Resolves: #1072958
 
 * Wed Feb 12 2014 Honza Horak <hhorak@redhat.com> 5.5.35-6
 - Rebase to 5.5.35
@@ -772,38 +761,34 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 - Remove perl provides so no dependency can be made on them
   Resolves: #1042873
 
-* Sun Dec 22 2013 Honza Horak <hhorak@redhat.com> 5.5.34-6
-- Don't test EDH-RSA-DES-CBC-SHA cipher, it seems to be removed from openssl
-  which now makes mariadb/mysql FTBFS because openssl_1 test fails
-  Related: #1037748
- 
-* Sat Dec 21 2013 Honza Horak <hhorak@redhat.com> 5.5.34-5
+* Sat Dec 21 2013 Honza Horak <hhorak@redhat.com> 5.5.34-6
 - Require psmisc so we have fuser utility
   Related: #1037748
 
-* Fri Dec 20 2013 Honza Horak <hhorak@redhat.com> 5.5.34-4
-- Check if socket is being used before starting
-  Related: #1037748
+* Fri Dec 20 2013 Honza Horak <hhorak@redhat.com> 5.5.34-5
+- Move check to proper place
+  Resolves: #1037748
+
+* Thu Dec 19 2013 Honza Horak <hhorak@redhat.com> 5.5.34-4
+- Check for socket file more safely
+  Resolves: #1037748
 
 * Wed Nov 27 2013 Honza Horak <hhorak@redhat.com> 5.5.34-3
 - Rebuild for openssl dependency issues
 
+* Mon Nov 25 2013 Honza Horak <hhorak@redhat.com> 5.5.34-2
+- Fix daemonstatus patch
+
 * Fri Nov 22 2013 Honza Horak <hhorak@redhat.com> 5.5.34-1
 - Rebase to 5.5.34
-
-* Fri Nov 22 2013 Honza Horak <hhorak@redhat.com> 5.5.33a-3
-- Use scl enable -- feature
 - Check if correct process is running in mysql-wait-ready script
   Related: #1025323
-- Use correct log file name in post script
-  Resolves: #1025280
 
-* Mon Nov 04 2013 Jakub Dorňák <jdornak@redhat.com> - 5.5.33a-2
-- Add pam-devel to BuildRequires for auth_pam.so to be built
-  Resolves: #1019868
-
-* Mon Oct 14 2013 Honza Horak <hhorak@redhat.com> 5.5.33a-2
-- Add stuff needed for RHEL-7
+* Fri Nov 22 2013 Honza Horak <hhorak@redhat.com> 5.5.33a-2
+- Return correct code if stopping service
+  Related: #986919
+- Add pam-devel to build-requires in order to build
+  Related: #1019945
 
 * Thu Oct 10 2013 Honza Horak <hhorak@redhat.com> 5.5.33a-1
 - Rebase to 5.5.33a
