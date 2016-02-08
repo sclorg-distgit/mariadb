@@ -21,17 +21,17 @@ diff -up mariadb-10.0.12/mysql-test/t/file_contents.test.file_contents mariadb-1
    $dir_docs =~ s|/lib|/share/doc|;
 @@ -22,7 +22,7 @@ if ($dir_bin eq '/usr/') {
      # RedHat: version number in directory name
-     $dir_docs = glob "$dir_docs/MySQL-server*";
+     $dir_docs = glob "$dir_docs/MariaDB-server*";
    }
 -} elsif ($dir_bin eq '/usr') {
-+} elsif ($dir_bin  =~ '.*/usr$') {
++} elsif ($dir_bin =~ '.*/usr$') {
    # RPM build during development
    $dir_docs = "$dir_bin/share/doc";
    if(-d "$dir_docs/packages") {
 @@ -32,6 +32,15 @@ if ($dir_bin eq '/usr/') {
      # RedHat/Debian: version number in directory name
      $dir_docs = glob "$dir_docs/mariadb-server-*";
-     $dir_docs = glob "$dir_docs/MySQL-server*" unless -d $dir_docs;
+     $dir_docs = glob "$dir_docs/MariaDB-server*" unless -d $dir_docs;
 +
 +    # All the above is entirely wacko, because these files are not docs;
 +    # they should be kept in libdir instead.  mtr does not provide a nice

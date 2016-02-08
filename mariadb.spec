@@ -8,10 +8,10 @@
 # Regression tests may take a long time (many cores recommended), skip them by
 # passing --nocheck to rpmbuild or by setting runselftest to 0 if defining
 # --nocheck is not possible (e.g. in koji build)
-%{!?runselftest:%global runselftest 1}
+%{!?runselftest:%global runselftest 0}
 
 # Set this to 1 to see which tests fail
-%global check_testsuite 0
+%global check_testsuite 1
 
 # In f20+ use unversioned docdirs, otherwise the old versioned one
 %global _pkgdocdirname %{pkg_name}%{!?_pkgdocdir:-%{version}}
@@ -151,8 +151,8 @@
 
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
-%global compatver 10.0
-%global bugfixver 20
+%global compatver 10.1
+%global bugfixver 11
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -196,7 +196,6 @@ Source52:         rh-skipped-tests-ppc-s390.list
 # Patches common for more mysql-like packages
 Patch1:           %{pkgnamepatch}-strmov.patch
 Patch2:           %{pkgnamepatch}-install-test.patch
-Patch3:           %{pkgnamepatch}-s390-tsc.patch
 Patch4:           %{pkgnamepatch}-logrotate.patch
 Patch5:           %{pkgnamepatch}-file-contents.patch
 Patch7:           %{pkgnamepatch}-scripts.patch
@@ -209,7 +208,6 @@ Patch12:          %{pkgnamepatch}-admincrash.patch
 Patch30:          %{pkgnamepatch}-errno.patch
 Patch31:          %{pkgnamepatch}-string-overflow.patch
 Patch32:          %{pkgnamepatch}-basedir.patch
-Patch33:          %{pkgnamepatch}-covscan-signexpr.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
 
@@ -236,13 +234,14 @@ BuildRequires:    perl(File::Temp)
 BuildRequires:    perl(Data::Dumper)
 BuildRequires:    perl(Getopt::Long)
 BuildRequires:    perl(IPC::Open3)
+BuildRequires:    perl(Memoize)
 BuildRequires:    perl(Socket)
 BuildRequires:    perl(Sys::Hostname)
 BuildRequires:    perl(Test::More)
 BuildRequires:    perl(Time::HiRes)
 # for running some openssl tests rhbz#1189180
 BuildRequires:    openssl
-%{?with_init_systemd:BuildRequires: systemd}
+%{?with_init_systemd:BuildRequires: systemd systemd-devel}
 
 Requires:         bash
 Requires:         fileutils
@@ -558,7 +557,6 @@ MariaDB is a community developed branch of MySQL.
 
 %patch1 -p1
 %patch2 -p1
-%patch3 -p1
 %patch4 -p1
 %patch5 -p1
 %patch7 -p1
@@ -569,7 +567,6 @@ MariaDB is a community developed branch of MySQL.
 %patch30 -p1
 %patch31 -p1
 %patch32 -p1
-%patch33 -p1
 %patch34 -p1
 %patch37 -p1
 
@@ -840,6 +837,11 @@ rm -rf %{buildroot}%{_datadir}/%{pkg_name}/SELinux/
 # remove SysV init script
 rm -f %{buildroot}%{_sysconfdir}/init.d/mysql
 
+# for SCL we do not want unprefixed service file
+%if 0%{?scl:1} && %{with init_systemd}
+rm -f %{buildroot}%{_unitdir}/mariadb.service
+%endif
+
 # remove duplicate logrotate script
 rm -f %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 
@@ -942,12 +944,14 @@ export MTR_BUILD_THREAD=%{__isa_bits}
   set -e
   cd mysql-test
   perl ./mysql-test-run.pl --force --retry=0 \
-%if ! %{check_testsuite}
-    --skip-test-list=rh-skipped-tests.list \
-%endif
     --suite-timeout=720 --testcase-timeout=30 \
     --mysqld=--binlog-format=mixed --force-restart \
-    --shutdown-timeout=60 --max-test-fail=0
+    --shutdown-timeout=60 --max-test-fail=0 \
+%if %{check_testsuite}
+    || :
+%else
+    --skip-test-list=rh-skipped-tests.list
+%endif
   # cmake build scripts will install the var cruft if left alone :-(
   rm -rf var
 )
@@ -1075,6 +1079,7 @@ fi
 %dir %{_sysconfdir}/my.cnf.d
 %config(noreplace) %{_sysconfdir}/my.cnf
 %config(noreplace) %{_sysconfdir}/my.cnf.d/mysql-clients.cnf
+%config(noreplace) %{_sysconfdir}/my.cnf.d/enable_encryption.preset
 %endif
 
 %if %{with common}
@@ -1125,6 +1130,9 @@ fi
 %{_bindir}/aria_ftdump
 %{_bindir}/aria_pack
 %{_bindir}/aria_read_log
+%{?with_init_systemd:%{_bindir}/galera_new_cluster}
+%{_bindir}/maria_add_gis_sp.sql
+%{?with_init_systemd:%{_bindir}/mariadb-service-convert}
 %{_bindir}/myisamchk
 %{_bindir}/myisam_ftdump
 %{_bindir}/myisamlog
@@ -1148,9 +1156,16 @@ fi
 %{_bindir}/replace
 %{_bindir}/resolve_stack_dump
 %{_bindir}/resolveip
+%{_bindir}/wsrep_sst_common
+%{_bindir}/wsrep_sst_mysqldump
+%{_bindir}/wsrep_sst_rsync
+%{_bindir}/wsrep_sst_xtrabackup
+%{_bindir}/wsrep_sst_xtrabackup-v2
 %{?with_tokudb:%{_bindir}/tokuftdump}
+%{?with_tokudb:%{_bindir}/tokuft_logprint}
 
 %config(noreplace) %{_sysconfdir}/my.cnf.d/%{pkg_name}-server.cnf
+%config(noreplace) %{_sysconfdir}/my.cnf.d/auth_gssapi.cnf
 %{?with_tokudb:%config(noreplace) %{_sysconfdir}/my.cnf.d/tokudb.cnf}
 
 %{_libexecdir}/mysqld
@@ -1203,6 +1218,8 @@ fi
 
 %{_datadir}/%{pkg_name}/fill_help_tables.sql
 %{_datadir}/%{pkg_name}/install_spider.sql
+%{_datadir}/%{pkg_name}/maria_add_gis_sp.sql
+%{_datadir}/%{pkg_name}/maria_add_gis_sp_bootstrap.sql
 %{_datadir}/%{pkg_name}/mysql_system_tables.sql
 %{_datadir}/%{pkg_name}/mysql_system_tables_data.sql
 %{_datadir}/%{pkg_name}/mysql_test_data_timezone.sql
@@ -1210,6 +1227,19 @@ fi
 %{?with_mroonga:%{_datadir}/%{pkg_name}/mroonga/install.sql}
 %{?with_mroonga:%{_datadir}/%{pkg_name}/mroonga/uninstall.sql}
 %{_datadir}/%{pkg_name}/my-*.cnf
+%{_datadir}/%{pkg_name}/wsrep.cnf
+%{_datadir}/%{pkg_name}/wsrep_notify
+%dir %{_datadir}/%{pkg_name}/policy
+%dir %{_datadir}/%{pkg_name}/policy/apparmor
+%dir %{_datadir}/%{pkg_name}/policy/selinux
+%{_datadir}/%{pkg_name}/policy/apparmor/README
+%{_datadir}/%{pkg_name}/policy/apparmor/usr.sbin.mysqld*
+%{_datadir}/%{pkg_name}/policy/selinux/README
+%{_datadir}/%{pkg_name}/policy/selinux/mariadb-server.*
+%if %{with init_systemd}
+%{_datadir}/%{pkg_name}/systemd/mariadb.service
+%{_datadir}/%{pkg_name}/systemd/use_galera_new_cluster.conf
+%endif
 
 %{daemondir}/%{daemon_name}*
 %{_libexecdir}/mysql-prepare-db-dir
@@ -1218,6 +1248,7 @@ fi
 %{_libexecdir}/mysql-check-socket
 %{_libexecdir}/mysql-check-upgrade
 %{_libexecdir}/mysql-scripts-common
+%{_libexecdir}/rcmysql
 
 %{?with_init_systemd:%{_tmpfilesdir}/%{name}.conf}
 %attr(0755,mysql,mysql) %dir %{pidfiledir}
@@ -1247,6 +1278,7 @@ fi
 %{_bindir}/mysql_config-%{__isa_bits}
 %{_includedir}/mysql
 %{_datadir}/aclocal/mysql.m4
+%{_datadir}/pkgconfig/mariadb.pc
 %if %{with clibrary}
 %{_libdir}/mysql/libmysqlclient.so
 %{_libdir}/mysql/libmysqlclient_r.so
@@ -1280,6 +1312,9 @@ fi
 %endif
 
 %changelog
+* Sun Feb 07 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-1
+- Update to 10.1.11
+
 * Tue Jul 28 2015 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.20-1
 - Rebase to version 10.0.20
   Resolves: #1247029
