@@ -8,7 +8,7 @@
 # Regression tests may take a long time (many cores recommended), skip them by
 # passing --nocheck to rpmbuild or by setting runselftest to 0 if defining
 # --nocheck is not possible (e.g. in koji build)
-%{!?runselftest:%global runselftest 0}
+%{!?runselftest:%global runselftest 1}
 
 # Set this to 1 to see which tests fail
 %global check_testsuite 1
@@ -160,7 +160,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          1%{?with_debug:.debug}%{?dist}
+Release:          2%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -1312,6 +1312,9 @@ fi
 %endif
 
 %changelog
+* Mon Feb 08 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-2
+- Enable testsuite
+
 * Sun Feb 07 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-1
 - Update to 10.1.11
 
