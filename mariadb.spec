@@ -160,7 +160,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          2%{?with_debug:.debug}%{?dist}
+Release:          8%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -186,6 +186,7 @@ Source14:         mysql-check-socket.sh
 Source15:         mysql-scripts-common.sh
 Source16:         mysql-check-upgrade.sh
 Source17:         mysql-wait-stop.sh
+Source18:         mysql@.service.in
 Source19:         mysql.init.in
 Source40:         daemon-scl-helper.sh
 Source50:         rh-skipped-tests-base.list
@@ -210,12 +211,14 @@ Patch31:          %{pkgnamepatch}-string-overflow.patch
 Patch32:          %{pkgnamepatch}-basedir.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
+Patch38:          %{pkgnamepatch}-servicename.patch
 
 # Patches specific for scl
 Patch90:          %{pkgnamepatch}-scl-env-check.patch
 
 BuildRequires:    cmake
 BuildRequires:    libaio-devel
+BuildRequires:    libedit-devel
 BuildRequires:    openssl-devel
 BuildRequires:    ncurses-devel
 BuildRequires:    perl
@@ -223,7 +226,9 @@ BuildRequires:    systemtap-sdt-devel
 BuildRequires:    zlib-devel
 # auth_pam.so plugin will be build if pam-devel is installed
 BuildRequires:    pam-devel
+# use either new enough version of pcre or provide bundles(pcre)
 %{?with_pcre:BuildRequires: pcre-devel >= 8.35}
+%{!?with_pcre:Provides: bundled(pcre) = 8.38}
 # Tests requires time and ps and some perl modules
 BuildRequires:    procps
 BuildRequires:    time
@@ -372,6 +377,11 @@ Requires:         perl(DBD::mysql)
 %{?scl:Requires:%scl_runtime}
 %{?scl:Requires:%{_root_bindir}/scl_source}
 %{?scl:Requires(post): policycoreutils-python libselinux-utils}
+# wsrep requirements
+Requires:         lsof
+Requires:         net-tools
+Requires:         sh-utils
+Requires:         rsync
 %if %{with mysql_names}
 Provides:         mysql-server = %{sameevr}
 Provides:         mysql-server%{?_isa} = %{sameevr}
@@ -480,6 +490,8 @@ Group:            Applications/Databases
 Requires:         %{name}-embedded%{?_isa} = %{sameevr}
 Requires:         %{name}-devel%{?_isa} = %{sameevr}
 %{?scl:Requires:%scl_runtime}
+# embedded-devel should require libaio-devel (rhbz#1290517)
+Requires:         libaio-devel
 %if %{with mysql_names}
 Provides:         mysql-embedded-devel = %{sameevr}
 Provides:         mysql-embedded-devel%{?_isa} = %{sameevr}
@@ -569,10 +581,7 @@ MariaDB is a community developed branch of MySQL.
 %patch32 -p1
 %patch34 -p1
 %patch37 -p1
-
-# removing bundled cmd-line-utils is now disabled
-# we cannot use libedit due #1201988
-# rm -r cmd-line-utils
+%patch38 -p1
 
 sed -i -e 's/2.8.7/2.6.4/g' cmake/cpack_rpm.cmake
 
@@ -592,7 +601,7 @@ cat %{SOURCE52} | tee -a mysql-test/rh-skipped-tests.list
 %endif
 
 cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
-   %{SOURCE14} %{SOURCE15} %{SOURCE16} %{SOURCE17} %{SOURCE19} \
+   %{SOURCE14} %{SOURCE15} %{SOURCE16} %{SOURCE17} %{SOURCE18} %{SOURCE19} \
    scripts
 
 %if 0%{?scl:1}
@@ -612,6 +621,7 @@ cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
 %endif
 
 %{?scl:scl enable %{scl} - << "EOF"}
+set -ex
 CFLAGS="%{optflags} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE"
 # force PIC mode so that we can build libmysqld.so
 CFLAGS="$CFLAGS -fPIC"
@@ -641,7 +651,6 @@ export LDFLAGS
 %cmake . \
          -DBUILD_CONFIG=mysql_release \
          -DFEATURE_SET="community" \
-         -DWITH_READLINE=ON \
          -DINSTALL_LAYOUT=RPM \
          -DDAEMON_NAME="%{daemon_name}" \
          -DDAEMON_NO_PREFIX="%{daemon_no_prefix}" \
@@ -699,6 +708,7 @@ done
 
 %install
 %{?scl:scl enable %{scl} - << "EOF"}
+set -ex
 make DESTDIR=%{buildroot} install
 %{?scl:EOF}
 
@@ -761,6 +771,7 @@ mv %{buildroot}%{_sysconfdir}/my.cnf.d/server.cnf %{buildroot}%{_sysconfdir}/my.
 # install systemd unit files and scripts for handling server startup
 %if %{with init_systemd}
 install -D -p -m 644 scripts/mysql.service %{buildroot}%{_unitdir}/%{daemon_name}.service
+install -D -p -m 644 scripts/mysql@.service %{buildroot}%{_unitdir}/%{daemon_name}@.service
 install -D -p -m 0644 scripts/mysql.tmpfiles.d %{buildroot}%{_tmpfilesdir}/%{name}.conf
 %if 0%{?mysqld_pid_dir:1}
 echo "d %{_root_localstatedir}/run/%{mysqld_pid_dir} 0755 mysql mysql -" >>%{buildroot}%{_tmpfilesdir}/%{name}.conf
@@ -925,6 +936,7 @@ EOF
 %if %{with test}
 %if %runselftest
 %{?scl:scl enable %{scl} - << "EOF"}
+set -ex
 # hack for https://mariadb.atlassian.net/browse/MDEV-7454
 %{?with_init_sysv:LD_LIBRARY_PATH=$(pwd)/unittest/mytap }make test VERBOSE=1
 # hack to let 32- and 64-bit tests run concurrently on same build machine
@@ -942,6 +954,8 @@ export MTR_BUILD_THREAD=%{__isa_bits}
 # increase timeouts to prevent unwanted failures during mass rebuilds
 (
   set -e
+  # avoid https://mariadb.atlassian.net/browse/MDEV-7454
+  export LD_LIBRARY_PATH="$(pwd)/unittest/mytap${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}"
   cd mysql-test
   perl ./mysql-test-run.pl --force --retry=0 \
     --suite-timeout=720 --testcase-timeout=30 \
@@ -1312,8 +1326,33 @@ fi
 %endif
 
 %changelog
-* Mon Feb 08 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-2
-- Enable testsuite
+* Sat Feb 13 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-8
+- Enable test-suite
+
+* Sat Feb 13 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-7
+- Re-enable using libedit, which should be now fixed
+  Related: #1201988
+- Add Provides: bundled(pcre) in case we build with bundled pcre
+  Related: #1302296
+- embedded-devel should require libaio-devel
+  Resolves: #1290517
+
+* Thu Feb 11 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-6
+- Rebuild with newer scl-utils
+
+* Thu Feb 11 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-5
+- Add missing requirements for proper wsrep functionality
+- Remove mariadb-wait-ready call from systemd unit, we have now systemd notify support
+- Make mariadb@.service similar to mariadb.service
+
+* Thu Feb 11 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-4
+- Use systemd unit file more compatible with upstream
+
+* Thu Feb 11 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-3
+- Fix service name in galera_new_cluster script
+
+* Wed Feb 10 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-2
+- Add set -xe for better build logs
 
 * Sun Feb 07 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-1
 - Update to 10.1.11

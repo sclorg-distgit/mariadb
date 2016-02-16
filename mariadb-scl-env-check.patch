@@ -1,6 +1,6 @@
-diff -up mariadb-10.0.17/scripts/mysqld_safe.sh.scl-env-check mariadb-10.0.17/scripts/mysqld_safe.sh
---- mariadb-10.0.17/scripts/mysqld_safe.sh.scl-env-check	2015-02-25 16:40:55.000000000 +0100
-+++ mariadb-10.0.17/scripts/mysqld_safe.sh	2015-03-14 12:49:01.693320701 +0100
+diff -up mariadb-10.1.11/scripts/mysqld_safe.sh.p90 mariadb-10.1.11/scripts/mysqld_safe.sh
+--- mariadb-10.1.11/scripts/mysqld_safe.sh.p90	2016-01-28 13:12:51.000000000 +0100
++++ mariadb-10.1.11/scripts/mysqld_safe.sh	2016-02-11 15:07:13.238878202 +0100
 @@ -11,6 +11,12 @@
  # mysql.server works by first doing a cd to the base directory and from there
  # executing mysqld_safe
@@ -14,9 +14,9 @@ diff -up mariadb-10.0.17/scripts/mysqld_safe.sh.scl-env-check mariadb-10.0.17/sc
  # Initialize script globals
  KILL_MYSQLD=1;
  MYSQLD=
-diff -up mariadb-10.0.17/scripts/mysql.init.in.scl-env-check mariadb-10.0.17/scripts/mysql.init.in
---- mariadb-10.0.17/scripts/mysql.init.in.scl-env-check	2015-03-14 12:49:01.693320701 +0100
-+++ mariadb-10.0.17/scripts/mysql.init.in	2015-03-14 12:49:01.693320701 +0100
+diff -up mariadb-10.1.11/scripts/mysql.init.in.p90 mariadb-10.1.11/scripts/mysql.init.in
+--- mariadb-10.1.11/scripts/mysql.init.in.p90	2016-02-11 15:07:13.235878197 +0100
++++ mariadb-10.1.11/scripts/mysql.init.in	2016-02-11 15:07:13.239878203 +0100
 @@ -154,6 +154,18 @@ condrestart(){
      [ -e $lockfile ] && restart || :
  }
@@ -36,9 +36,9 @@ diff -up mariadb-10.0.17/scripts/mysql.init.in.scl-env-check mariadb-10.0.17/scr
  
  # See how we were called.
  case "$1" in
-diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.17/scripts/mysql_install_db.sh
---- mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check	2015-03-14 12:49:00.319319690 +0100
-+++ mariadb-10.0.17/scripts/mysql_install_db.sh	2015-03-14 12:49:01.694320701 +0100
+diff -up mariadb-10.1.11/scripts/mysql_install_db.sh.p90 mariadb-10.1.11/scripts/mysql_install_db.sh
+--- mariadb-10.1.11/scripts/mysql_install_db.sh.p90	2016-02-11 15:07:12.611877135 +0100
++++ mariadb-10.1.11/scripts/mysql_install_db.sh	2016-02-11 15:07:13.240878205 +0100
 @@ -19,6 +19,12 @@
  #
  # All unrecognized arguments to this script are passed to mysqld.
@@ -52,7 +52,7 @@ diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.
  basedir=""
  builddir=""
  ldata="@localstatedir@"
-@@ -435,16 +441,16 @@ else
+@@ -438,16 +444,16 @@ else
    echo "The problem could be conflicting information in an external"
    echo "my.cnf files. You can ignore these by doing:"
    echo
@@ -72,7 +72,7 @@ diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.
    echo "    mysql> show tables;"
    echo
    echo "Try 'mysqld --help' if you have problems with paths.  Using"
-@@ -474,19 +480,15 @@ fi
+@@ -488,19 +494,15 @@ fi
  # the screen.
  if test "$cross_bootstrap" -eq 0 && test -z "$srcdir"
  then
@@ -95,7 +95,7 @@ diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.
    echo
    echo "which will also give you the option of removing the test"
    echo "databases and anonymous user created by default.  This is"
-@@ -502,7 +504,8 @@ then
+@@ -516,7 +518,8 @@ then
      echo "cd '$basedir' ; $bindir/mysqld_safe --datadir='$ldata'"
      echo
      echo "You can test the MariaDB daemon with mysql-test-run.pl"
@@ -105,10 +105,10 @@ diff -up mariadb-10.0.17/scripts/mysql_install_db.sh.scl-env-check mariadb-10.0.
    fi
  
    echo
-diff -up mariadb-10.0.17/scripts/mysql.service.in.scl-env-check mariadb-10.0.17/scripts/mysql.service.in
---- mariadb-10.0.17/scripts/mysql.service.in.scl-env-check	2015-03-14 12:49:01.594320628 +0100
-+++ mariadb-10.0.17/scripts/mysql.service.in	2015-03-14 16:06:28.582056853 +0100
-@@ -32,14 +32,20 @@ Type=simple
+diff -up mariadb-10.1.11/scripts/mysql.service.in.p90 mariadb-10.1.11/scripts/mysql.service.in
+--- mariadb-10.1.11/scripts/mysql.service.in.p90	2016-02-11 15:07:13.240878205 +0100
++++ mariadb-10.1.11/scripts/mysql.service.in	2016-02-11 15:10:28.640210693 +0100
+@@ -34,14 +34,20 @@ Type=notify
  User=mysql
  Group=mysql
  
@@ -122,22 +122,21 @@ diff -up mariadb-10.0.17/scripts/mysql.service.in.scl-env-check mariadb-10.0.17/
 +
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir %n
+ # MYSQLD_OPTS here is for users to set in /etc/systemd/system/@DAEMON_NAME@@.service.d/MY_SPECIAL.conf
  # Note: we set --basedir to prevent probes that might trigger SELinux alarms,
  # per bug #547485
--ExecStart=@bindir@/mysqld_safe --basedir=@prefix@
--ExecStartPost=@libexecdir@/mysql-wait-ready $MAINPID
+-ExecStart=@libexecdir@/mysqld --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 -ExecStartPost=@libexecdir@/mysql-check-upgrade
 -ExecStopPost=@libexecdir@/mysql-wait-stop
-+ExecStart=@libexecdir@/mysqld_safe-scl-helper enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @bindir@/mysqld_safe --basedir=@prefix@
-+ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-ready $MAINPID
++ExecStart=@libexecdir@/mysqld_safe-scl-helper enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysqld --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 +ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade
 +ExecStopPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-stop
  
- # Give a reasonable amount of time for the server to start up/shut down
- TimeoutSec=300
-diff -up mariadb-10.0.17/support-files/mysql-log-rotate.sh.scl-env-check mariadb-10.0.17/support-files/mysql-log-rotate.sh
---- mariadb-10.0.17/support-files/mysql-log-rotate.sh.scl-env-check	2015-03-14 12:49:00.278319660 +0100
-+++ mariadb-10.0.17/support-files/mysql-log-rotate.sh	2015-03-14 12:49:01.694320701 +0100
+ # Setting this to true can break replication and the Type=notify settings
+ # See also bind-address mysqld option.
+diff -up mariadb-10.1.11/support-files/mysql-log-rotate.sh.p90 mariadb-10.1.11/support-files/mysql-log-rotate.sh
+--- mariadb-10.1.11/support-files/mysql-log-rotate.sh.p90	2016-02-11 15:07:12.570877065 +0100
++++ mariadb-10.1.11/support-files/mysql-log-rotate.sh	2016-02-11 15:07:13.240878205 +0100
 @@ -30,9 +30,9 @@
  #    postrotate
  #	# just if mysqld is really running
