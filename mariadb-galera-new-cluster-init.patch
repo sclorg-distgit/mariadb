@@ -1,0 +1,21 @@
+--- mariadb-10.1.14/scripts/galera_new_cluster.sh.orig	2016-04-04 17:12:47.255723207 +0200
++++ mariadb-10.1.14/scripts/galera_new_cluster.sh	2016-04-04 17:13:23.129492288 +0200
+@@ -21,10 +21,13 @@
+     exit 0
+ fi 
+ 
+-VERSION="@VERSION@@MYSQL_SERVER_SUFFIX@"
+-COMPILATION_COMMENT="@COMPILATION_COMMENT@"
++echo "_WSREP_NEW_CLUSTER='--wsrep-new-cluster'" >> /etc/opt/rh/rh-mariadb101/sysconfig/mariadb
+ 
+-systemctl set-environment _WSREP_NEW_CLUSTER='--wsrep-new-cluster' && \
+-    systemctl start ${1:-@DAEMON_NAME@}
++service rh-mariadb101-mariadb start
++
++EXIT_CODE=$?
++
++sed -i -r "/^_WSREP_NEW_CLUSTER='--wsrep-new-cluster'$/d" /etc/opt/rh/rh-mariadb101/sysconfig/mariadb
++
++exit $EXIT_CODE
+ 
+-systemctl set-environment _WSREP_NEW_CLUSTER=''

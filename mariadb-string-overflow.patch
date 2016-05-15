@@ -11,7 +11,7 @@ Error: BUFFER_SIZE_WARNING:
 diff -up mariadb-10.0.10/sql/sql_prepare.cc.p8 mariadb-10.0.10/sql/sql_prepare.cc
 --- mariadb-10.0.10/sql/sql_prepare.cc.p8	2014-03-30 19:56:42.000000000 +0200
 +++ mariadb-10.0.10/sql/sql_prepare.cc	2014-04-07 18:43:33.901074770 +0200
-@@ -3021,7 +3021,7 @@ void mysql_stmt_get_longdata(THD *thd, c
+@@ -3277,7 +3277,7 @@ void mysql_stmt_get_longdata(THD *thd, c
    {
      stmt->state= Query_arena::STMT_ERROR;
      stmt->last_errno= thd->get_stmt_da()->sql_errno();

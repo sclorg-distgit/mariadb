@@ -61,6 +61,7 @@
 %bcond_without errmsg
 %bcond_without bench
 %bcond_without test
+%bcond_without galera
 
 %if 0%{?scl:1}
 %bcond_with embedded
@@ -152,7 +153,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.1
-%global bugfixver 11
+%global bugfixver 14
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -160,7 +161,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          8%{?with_debug:.debug}%{?dist}
+Release:          2%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -192,6 +193,10 @@ Source40:         daemon-scl-helper.sh
 Source50:         rh-skipped-tests-base.list
 Source51:         rh-skipped-tests-arm.list
 Source52:         rh-skipped-tests-ppc-s390.list
+# TODO: clustercheck contains some hard-coded paths, these should be expanded using template system
+Source70:         clustercheck.sh
+Source71:         LICENSE.clustercheck
+Source72:         mariadb-server-galera.te
 
 # Comments for these patches are in the patch files
 # Patches common for more mysql-like packages
@@ -212,6 +217,20 @@ Patch32:          %{pkgnamepatch}-basedir.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
 Patch38:          %{pkgnamepatch}-servicename.patch
+
+# Patches for galera
+Patch40:          %{pkgnamepatch}-galera.cnf.patch
+Patch41:          %{pkgnamepatch}-galera-new-cluster-help.patch
+Patch42:          %{pkgnamepatch}-galera-new-cluster-init.patch
+
+# Patches for bundled pcre
+# Fix CVE-2016-3191 (workspace overflow for (*ACCEPT) with deeply nested
+# parentheses), upstream bug #1791, fixed in upstream after 8.38
+Patch50:          pcre-8.38-Fix-workspace-overflow-for-ACCEPT-with-deeply-nested.patch
+# Fix CVE-2016-1283 (heap buffer overflow in handling of nested duplicate named
+# groups with a nested back reference), bug #1295386, upstream bug #1767,
+# fixed in upstream after 8.38
+Patch51:          pcre-8.38-Yet-another-duplicate-name-bugfix-by-overestimating-.patch
 
 # Patches specific for scl
 Patch90:          %{pkgnamepatch}-scl-env-check.patch
@@ -246,6 +265,9 @@ BuildRequires:    perl(Test::More)
 BuildRequires:    perl(Time::HiRes)
 # for running some openssl tests rhbz#1189180
 BuildRequires:    openssl
+%if %{with galera}
+BuildRequires:    selinux-policy-devel
+%endif
 %{?with_init_systemd:BuildRequires: systemd systemd-devel}
 
 Requires:         bash
@@ -346,6 +368,26 @@ MariaDB packages.
 %endif
 
 
+%if %{with galera}
+%package          server-galera
+Summary:          The configuration files and scripts for galera replication
+Group:            Applications/Databases
+Requires:         %{name}-common%{?_isa} = %{sameevr}
+Requires:         %{name}-server%{?_isa} = %{sameevr}
+Requires:         %{?scl_prefix}galera >= 25.3.3
+Requires(post):   libselinux-utils
+Requires(post):   policycoreutils-python
+%{?scl:Requires:%scl_runtime}
+
+%description      server-galera
+MariaDB is a multi-user, multi-threaded SQL database server. It is a
+client/server implementation consisting of a server daemon (mysqld)
+and many different client programs and libraries. This package contains
+the MariaDB server and some accompanying files and directories.
+MariaDB is a community developed branch of MySQL.
+%endif
+
+
 %package          server
 Summary:          The MariaDB server and related files
 Group:            Applications/Databases
@@ -376,7 +418,6 @@ Requires:         perl(DBI)
 Requires:         perl(DBD::mysql)
 %{?scl:Requires:%scl_runtime}
 %{?scl:Requires:%{_root_bindir}/scl_source}
-%{?scl:Requires(post): policycoreutils-python libselinux-utils}
 # wsrep requirements
 Requires:         lsof
 Requires:         net-tools
@@ -582,6 +623,16 @@ MariaDB is a community developed branch of MySQL.
 %patch34 -p1
 %patch37 -p1
 %patch38 -p1
+%patch40 -p1
+%patch41 -p1
+%if %{without init_systemd}
+%patch42 -p1
+%endif
+
+pushd pcre
+%patch50 -p1
+%patch51 -p1
+popd
 
 sed -i -e 's/2.8.7/2.6.4/g' cmake/cpack_rpm.cmake
 
@@ -602,10 +653,20 @@ cat %{SOURCE52} | tee -a mysql-test/rh-skipped-tests.list
 
 cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
    %{SOURCE14} %{SOURCE15} %{SOURCE16} %{SOURCE17} %{SOURCE18} %{SOURCE19} \
-   scripts
+   %{SOURCE70} scripts
 
 %if 0%{?scl:1}
 %patch90 -p1
+%endif
+
+%if %{with galera}
+# prepare selinux policy
+mkdir selinux
+sed 's/mariadb-server-galera/%{name}-server-galera/' %{SOURCE72} > selinux/%{name}-server-galera.te
+%if 0%{?rhel} == 6
+sed -i 's/kerberos_port_t/kerberos_master_port_t/' selinux/%{name}-server-galera.te
+%endif
+cat selinux/%{name}-server-galera.te
 %endif
 
 %build
@@ -706,6 +767,12 @@ for e in innobase xtradb ; do
   done
 done
 
+# build selinux policy
+%if %{with galera}
+pushd selinux
+make -f /usr/share/selinux/devel/Makefile %{name}-server-galera.pp
+%endif
+
 %install
 %{?scl:scl enable %{scl} - << "EOF"}
 set -ex
@@ -796,6 +863,11 @@ install -p -m 644 scripts/mysql-scripts-common %{buildroot}%{_libexecdir}/mysql-
 install -p -m 755 %{SOURCE40} %{buildroot}%{_libexecdir}/mysqld_safe-scl-helper
 %endif
 
+# install selinux policy
+%if %{with galera}
+install -p -m 644 -D selinux/%{name}-server-galera.pp %{buildroot}%{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp
+%endif
+
 # Remove libmysqld.a
 rm -f %{buildroot}%{_libdir}/mysql/libmysqld.a
 
@@ -838,6 +910,22 @@ install -p -m 0644 %{SOURCE5} %{basename:%{SOURCE5}}
 install -p -m 0644 %{SOURCE6} %{basename:%{SOURCE6}}
 install -p -m 0644 %{SOURCE7} %{basename:%{SOURCE7}}
 install -p -m 0644 %{SOURCE16} %{basename:%{SOURCE16}}
+install -p -m 0644 %{SOURCE71} %{basename:%{SOURCE71}}
+
+# install galera config file
+sed -i -r 's|^wsrep_provider=none|wsrep_provider=%{_libdir}/galera/libgalera_smm.so|' support-files/wsrep.cnf
+install -p -m 0644 support-files/wsrep.cnf %{buildroot}%{_sysconfdir}/my.cnf.d/galera.cnf
+
+# install the clustercheck script
+mkdir -p %{buildroot}%{_sysconfdir}/sysconfig
+touch %{buildroot}%{_sysconfdir}/sysconfig/clustercheck
+install -p -m 0755 scripts/clustercheck %{buildroot}%{_bindir}/clustercheck
+
+# install the galera_new_cluster script anyway
+%if %{without init_systemd}
+sed -i 's/@DAEMON_NAME@/%{name}/g' scripts/galera_new_cluster.sh
+install -p -m 0755 scripts/galera_new_cluster.sh %{buildroot}%{_bindir}/galera_new_cluster
+%endif
 
 # install the list of skipped tests to be available for user runs
 install -p -m 0644 mysql-test/rh-skipped-tests.list %{buildroot}%{_datadir}/mysql-test
@@ -845,8 +933,9 @@ install -p -m 0644 mysql-test/rh-skipped-tests.list %{buildroot}%{_datadir}/mysq
 # remove unneeded RHEL-4 SELinux stuff
 rm -rf %{buildroot}%{_datadir}/%{pkg_name}/SELinux/
 
-# remove SysV init script
+# remove SysV init script and a symlink to that
 rm -f %{buildroot}%{_sysconfdir}/init.d/mysql
+rm -f %{buildroot}%{_libexecdir}/rcmysql
 
 # for SCL we do not want unprefixed service file
 %if 0%{?scl:1} && %{with init_systemd}
@@ -858,6 +947,9 @@ rm -f %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 
 # remove solaris files
 rm -rf %{buildroot}%{_datadir}/%{pkg_name}/solaris/
+
+# rename the wsrep README so it corresponds with the other README names
+mv Docs/README-wsrep Docs/README.wsrep
 
 %if %{without clibrary}
 unlink %{buildroot}%{_libdir}/mysql/libmysqlclient.so
@@ -877,6 +969,7 @@ rm -f %{buildroot}%{_mandir}/man1/{mysql_client_test_embedded,mysqltest_embedded
 rm -f %{buildroot}%{_bindir}/mysql_config*
 rm -rf %{buildroot}%{_includedir}/mysql
 rm -f %{buildroot}%{_datadir}/aclocal/mysql.m4
+rm -f %{buildroot}%{_datadir}/pkgconfig/mariadb.pc
 rm -f %{buildroot}%{_libdir}/mysql/libmysqlclient*.so
 rm -f %{buildroot}%{_mandir}/man1/mysql_config.1*
 %endif
@@ -986,28 +1079,19 @@ export MTR_BUILD_THREAD=%{__isa_bits}
 %post embedded -p /sbin/ldconfig
 %endif
 
-%post server
-%if 0%{?scl:1}
-semanage fcontext -a -e "%{se_daemon_source}" "%{daemondir}/%{daemon_name}%{?with_init_systemd:.service}" >/dev/null 2>&1 || :
-semanage fcontext -a -t mysqld_var_run_t "%{pidfiledir}" >/dev/null 2>&1 || :
-# work-around for rhbz#1203991
-semanage fcontext -a -t mysqld_etc_t '/etc/my\.cnf\.d/.*' >/dev/null 2>&1 || :
-%if 0%{?rhel} <= 6
-# work-around for rhbz#1194206
-semanage fcontext -a -t mysqld_log_t '/var/log/mariadb(/.*)?' >/dev/null 2>&1 || :
+%if %{with galera}
+%post server-galera
+%if 0%{?rhel} == 6
+semanage port -a -t mysqld_port_t -p tcp 4567 >/dev/null 2>&1 || :
+semanage port -a -t mysqld_port_t -p udp 4567 >/dev/null 2>&1 || :
+%else
+semanage port -a -t tram_port_t -p udp 4567 >/dev/null 2>&1 || :
 %endif
-%if %{with init_systemd}
-# work-around for rhbz#1172683
-semanage fcontext -a -t mysqld_safe_exec_t %{_root_libexecdir}/mysqld_safe-scl-helper >/dev/null 2>&1 || :
-%endif
-selinuxenabled && load_policy || :
-restorecon -R "%{?_scl_root}/" >/dev/null 2>&1 || :
-restorecon -R "%{_sysconfdir}" >/dev/null 2>&1 || :
-restorecon -R "%{_localstatedir}" >/dev/null 2>&1 || :
-restorecon -R "%{daemondir}/%{daemon_name}%{?with_init_systemd:.service}" >/dev/null 2>&1 || :
-restorecon -R "%{pidfiledir}" >/dev/null 2>&1 || :
+semanage port -a -t mysqld_port_t -p tcp 4568 >/dev/null 2>&1 || :
+semodule -i %{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp >/dev/null 2>&1 || :
 %endif
 
+%post server
 %if %{with init_systemd}
 %systemd_post %{daemon_name}.service
 %endif
@@ -1034,6 +1118,13 @@ fi
 
 %if %{with embedded}
 %postun embedded -p /sbin/ldconfig
+%endif
+
+%if %{with galera}
+%postun server-galera
+if [ $1 -eq 0 ]; then
+    semodule -r %{name}-server-galera 2>/dev/null || :
+fi
 %endif
 
 %postun server
@@ -1136,6 +1227,19 @@ fi
 %lang(uk) %{_datadir}/%{pkg_name}/ukrainian
 %endif
 
+%if %{with galera}
+%files server-galera
+%doc Docs/README.wsrep LICENSE.clustercheck
+%{_bindir}/galera_new_cluster
+%{_bindir}/clustercheck
+%if %{with init_systemd}
+%{_datadir}/%{pkg_name}/systemd/use_galera_new_cluster.conf
+%endif
+%config(noreplace) %{_sysconfdir}/my.cnf.d/galera.cnf
+%attr(0640,root,root) %ghost %config(noreplace) %{_sysconfdir}/sysconfig/clustercheck
+%{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp
+%endif
+
 %files server
 %doc README.mysql-cnf
 
@@ -1144,9 +1248,9 @@ fi
 %{_bindir}/aria_ftdump
 %{_bindir}/aria_pack
 %{_bindir}/aria_read_log
-%{?with_init_systemd:%{_bindir}/galera_new_cluster}
-%{_bindir}/maria_add_gis_sp.sql
-%{?with_init_systemd:%{_bindir}/mariadb-service-convert}
+%if %{with init_systemd}
+%{_bindir}/mariadb-service-convert
+%endif
 %{_bindir}/myisamchk
 %{_bindir}/myisam_ftdump
 %{_bindir}/myisamlog
@@ -1237,6 +1341,7 @@ fi
 %{_datadir}/%{pkg_name}/mysql_system_tables.sql
 %{_datadir}/%{pkg_name}/mysql_system_tables_data.sql
 %{_datadir}/%{pkg_name}/mysql_test_data_timezone.sql
+%{_datadir}/%{pkg_name}/mysql_to_mariadb.sql
 %{_datadir}/%{pkg_name}/mysql_performance_tables.sql
 %{?with_mroonga:%{_datadir}/%{pkg_name}/mroonga/install.sql}
 %{?with_mroonga:%{_datadir}/%{pkg_name}/mroonga/uninstall.sql}
@@ -1252,7 +1357,6 @@ fi
 %{_datadir}/%{pkg_name}/policy/selinux/mariadb-server.*
 %if %{with init_systemd}
 %{_datadir}/%{pkg_name}/systemd/mariadb.service
-%{_datadir}/%{pkg_name}/systemd/use_galera_new_cluster.conf
 %endif
 
 %{daemondir}/%{daemon_name}*
@@ -1262,7 +1366,6 @@ fi
 %{_libexecdir}/mysql-check-socket
 %{_libexecdir}/mysql-check-upgrade
 %{_libexecdir}/mysql-scripts-common
-%{_libexecdir}/rcmysql
 
 %{?with_init_systemd:%{_tmpfilesdir}/%{name}.conf}
 %attr(0755,mysql,mysql) %dir %{pidfiledir}
@@ -1326,6 +1429,42 @@ fi
 %endif
 
 %changelog
+* Thu May 12 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.14-2
+- Fixed selinux policy removal
+  Related: #1333007
+
+* Wed May 11 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.14-1
+- Fixed selinux policy
+- Update to 10.1.14 (includes various bug fixes)
+- Add -h and --help options to galera_new_cluster
+  Resolves: #1333007
+
+* Thu May  5 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.13-2
+- Fix CVE-2016-3191 and CVE-2016-1283
+  Resolves: #1330494
+
+* Fri Apr 15 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.13-1
+- Update to 10.1.13
+
+* Wed Apr 13 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.11-14
+- Add selinux policy
+
+* Wed Apr 13 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.11-13
+- Rebuild with new boost
+
+* Wed Apr  6 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.11-12
+- Fixed Requires (missing scl_prefix)
+
+* Mon Apr  4 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.11-11
+- Add galera subpackage, which provides galera related files
+
+* Thu Feb 25 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-10
+- Rebuild after buildroot change
+  Resolves: #1311579
+
+* Tue Feb 16 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-9
+- Remove dangling symlink to /etc/init.d/mysql
+
 * Sat Feb 13 2016 Honza Horak <hhorak@redhat.com> - 1:10.1.11-8
 - Enable test-suite
 

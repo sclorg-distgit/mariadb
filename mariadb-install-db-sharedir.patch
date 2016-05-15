@@ -15,7 +15,7 @@ diff -up mariadb-10.0.13/scripts/mysql_install_db.pl.in.pbasedir mariadb-10.0.13
 diff -up mariadb-10.0.13/scripts/mysql_install_db.sh.pbasedir mariadb-10.0.13/scripts/mysql_install_db.sh
 --- mariadb-10.0.13/scripts/mysql_install_db.sh.pbasedir	2014-09-04 12:51:59.005086301 +0200
 +++ mariadb-10.0.13/scripts/mysql_install_db.sh	2014-09-04 12:54:02.794222597 +0200
-@@ -280,16 +280,16 @@ then
+@@ -282,16 +282,16 @@ then
      cannot_find_file mysqld $basedir/libexec $basedir/sbin $basedir/bin
      exit 1
    fi
