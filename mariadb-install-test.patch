@@ -1,8 +1,8 @@
 Improve the documentation that will be installed in the mysql-test RPM.
 
-diff -up mariadb-10.0.10/mysql-test/README.p3 mariadb-10.0.10/mysql-test/README
---- mariadb-10.0.10/mysql-test/README.p3	2014-04-07 16:05:51.402631548 +0200
-+++ mariadb-10.0.10/mysql-test/README	2014-04-07 16:06:06.137637991 +0200
+diff -up mariadb-10.0.25/mysql-test/README.orig mariadb-10.0.25/mysql-test/README
+--- mariadb-10.0.25/mysql-test/README.orig	2016-04-28 22:27:44.000000000 +0200
++++ mariadb-10.0.25/mysql-test/README	2016-05-05 14:57:26.937273700 +0200
 @@ -1,15 +1,28 @@
 -This directory contains a test suite for the MySQL daemon. To run
 -the currently existing test cases, simply execute ./mysql-test-run in
@@ -42,7 +42,7 @@ diff -up mariadb-10.0.10/mysql-test/README.p3 mariadb-10.0.10/mysql-test/README
 +If one or more tests fail on your system, please read the following manual
 +section for instructions on how to report the problem:
  
- http://kb.askmonty.org/v/reporting-bugs
+ https://mariadb.com/kb/en/reporting-bugs
  
 @@ -26,7 +39,8 @@ other relevant options.
  

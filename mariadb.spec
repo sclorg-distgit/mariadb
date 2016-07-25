@@ -152,7 +152,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.0
-%global bugfixver 20
+%global bugfixver 25
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -160,7 +160,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          1%{?with_debug:.debug}%{?dist}
+Release:          4%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -209,9 +209,17 @@ Patch12:          %{pkgnamepatch}-admincrash.patch
 Patch30:          %{pkgnamepatch}-errno.patch
 Patch31:          %{pkgnamepatch}-string-overflow.patch
 Patch32:          %{pkgnamepatch}-basedir.patch
-Patch33:          %{pkgnamepatch}-covscan-signexpr.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
+
+# Patches for bundled pcre
+# Fix CVE-2016-3191 (workspace overflow for (*ACCEPT) with deeply nested
+# parentheses), upstream bug #1791, fixed in upstream after 8.38
+Patch50:          pcre-8.38-Fix-workspace-overflow-for-ACCEPT-with-deeply-nested.patch
+# Fix CVE-2016-1283 (heap buffer overflow in handling of nested duplicate named
+# groups with a nested back reference), bug #1295386, upstream bug #1767,
+# fixed in upstream after 8.38
+Patch51:          pcre-8.38-Yet-another-duplicate-name-bugfix-by-overestimating-.patch
 
 # Patches specific for scl
 Patch90:          %{pkgnamepatch}-scl-env-check.patch
@@ -225,7 +233,9 @@ BuildRequires:    systemtap-sdt-devel
 BuildRequires:    zlib-devel
 # auth_pam.so plugin will be build if pam-devel is installed
 BuildRequires:    pam-devel
+# use either new enough version of pcre or provide bundles(pcre)
 %{?with_pcre:BuildRequires: pcre-devel >= 8.35}
+%{!?with_pcre:Provides: bundled(pcre) = 8.38}
 # Tests requires time and ps and some perl modules
 BuildRequires:    procps
 BuildRequires:    time
@@ -569,13 +579,17 @@ MariaDB is a community developed branch of MySQL.
 %patch30 -p1
 %patch31 -p1
 %patch32 -p1
-%patch33 -p1
 %patch34 -p1
 %patch37 -p1
 
 # removing bundled cmd-line-utils is now disabled
 # we cannot use libedit due #1201988
 # rm -r cmd-line-utils
+
+pushd pcre
+%patch50 -p1
+%patch51 -p1
+popd
 
 sed -i -e 's/2.8.7/2.6.4/g' cmake/cpack_rpm.cmake
 
@@ -615,6 +629,7 @@ cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
 %endif
 
 %{?scl:scl enable %{scl} - << "EOF"}
+set -ex
 CFLAGS="%{optflags} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE"
 # force PIC mode so that we can build libmysqld.so
 CFLAGS="$CFLAGS -fPIC"
@@ -702,6 +717,7 @@ done
 
 %install
 %{?scl:scl enable %{scl} - << "EOF"}
+set -ex
 make DESTDIR=%{buildroot} install
 %{?scl:EOF}
 
@@ -923,8 +939,12 @@ EOF
 %if %{with test}
 %if %runselftest
 %{?scl:scl enable %{scl} - << "EOF"}
+set -x
+%if 0%{?rhel} == 6
 # hack for https://mariadb.atlassian.net/browse/MDEV-7454
-%{?with_init_sysv:LD_LIBRARY_PATH=$(pwd)/unittest/mytap }make test VERBOSE=1
+export LD_LIBRARY_PATH=$(pwd)/unittest/mytap:$LD_LIBRARY_PATH
+%endif
+make test VERBOSE=1
 # hack to let 32- and 64-bit tests run concurrently on same build machine
 export MTR_PARALLEL=1
 # builds might happen at the same host, avoid collision
@@ -942,12 +962,14 @@ export MTR_BUILD_THREAD=%{__isa_bits}
   set -e
   cd mysql-test
   perl ./mysql-test-run.pl --force --retry=0 \
-%if ! %{check_testsuite}
-    --skip-test-list=rh-skipped-tests.list \
-%endif
     --suite-timeout=720 --testcase-timeout=30 \
     --mysqld=--binlog-format=mixed --force-restart \
-    --shutdown-timeout=60 --max-test-fail=0
+    --shutdown-timeout=60 --max-test-fail=0 \
+%if %{check_testsuite}
+    || :
+%else
+    --skip-test-list=rh-skipped-tests.list
+%endif
   # cmake build scripts will install the var cruft if left alone :-(
   rm -rf var
 )
@@ -1280,6 +1302,33 @@ fi
 %endif
 
 %changelog
+* Thu May 12 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-4
+  Fixed Provides
+  (Provides bundled pcre)
+  Related: #1330490
+
+* Tue May 10 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-3
+  Fixed testsuite
+  (couldn't find libmytap.so)
+  Related: #1330490
+
+* Fri May  6 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-2
+- Fix CVE-2016-3191 and CVE-2016-1283
+  Resolves: #1330490
+
+* Thu May  5 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-1
+- Rebase to version 10.0.25
+  Resolves: #1330444
+  Also fixes: CVE-2016-2047 CVE-2016-0668 CVE-2016-0666 CVE-2016-0655
+  CVE-2016-0651 CVE-2016-0650 CVE-2016-0649 CVE-2016-0648 CVE-2016-0647
+  CVE-2016-0646 CVE-2016-0644 CVE-2016-0643 CVE-2016-0642 CVE-2016-0641
+  CVE-2016-0640 CVE-2016-0616 CVE-2016-0610 CVE-2016-0609 CVE-2016-0608
+  CVE-2016-0606 CVE-2016-0600 CVE-2016-0598 CVE-2016-0597 CVE-2016-0596
+  CVE-2016-0546 CVE-2016-0505 CVE-2015-7744 CVE-2015-4913 CVE-2015-4895
+  CVE-2015-4879 CVE-2015-4870 CVE-2015-4861 CVE-2015-4858 CVE-2015-4836
+  CVE-2015-4830 CVE-2015-4826 CVE-2015-4819 CVE-2015-4816 CVE-2015-4815
+  CVE-2015-4807 CVE-2015-4802 CVE-2015-4792
+
 * Tue Jul 28 2015 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.20-1
 - Rebase to version 10.0.20
   Resolves: #1247029
