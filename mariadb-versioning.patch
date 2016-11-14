@@ -13,9 +13,8 @@ Upstream bug: https://mariadb.atlassian.net/browse/MDEV-5529
 However, to stay binary compatible in F20 and lower, we need to use the
 former way.
 
-diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMakeLists.txt
---- mariadb-5.5.44/libmysql/CMakeLists.txt.orig	2015-07-28 11:46:09.188788004 +0200
-+++ mariadb-5.5.44/libmysql/CMakeLists.txt	2015-07-28 11:59:52.472574462 +0200
+--- mariadb-5.5.49/libmysql/CMakeLists.txt.orig	2016-04-20 22:44:31.000000000 +0200
++++ mariadb-5.5.49/libmysql/CMakeLists.txt	2016-06-16 16:47:27.422900319 +0200
 @@ -1,5 +1,4 @@
 -# Copyright (c) 2006, 2013, Oracle and/or its affiliates.
 -# Copyright (c) 2009, 2013, SkySQL Ab.
@@ -54,16 +53,77 @@ diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMa
  mysql_fetch_row_cont
  mysql_fetch_row_start
  mysql_free_result_cont
-@@ -255,113 +248,72 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
-   # for compatibility with distribution packages, so client shared library can 
-   # painlessly replace the one supplied by the distribution.
+@@ -270,137 +263,78 @@ IF(CMAKE_SYSTEM_NAME MATCHES "Linux")
+         "to be able to complete the build")
+     ENDIF (NOT SUPPORTS_VERSION_IN_LINK_SCRIPT)
+ 
+-  # When building RPM, or DEB package on Debian, use ELF symbol versioning
+-  # for compatibility with distribution packages, so client shared library can 
+-  # painlessly replace the one supplied by the distribution.
++    # When building RPM, or DEB package on Debian, use ELF symbol versioning
++    # for compatibility with distribution packages, so client shared library can 
++    # painlessly replace the one supplied by the distribution.
++    
++    # Also list of exported symbols in distributions may differ from what is considered
++    # official API. Define CLIENT_API_EXTRA for the set of symbols, that required to
++    # be exported on different platforms.
++
++    IF(RPM)
++      # Fedora & Co declared following functions as part of API 
++      SET(CLIENT_API_EXTRA
++        mysql_default_charset_info
++        mysql_get_charset
++        mysql_get_charset_by_csname
++        mysql_net_realloc
++        mysql_client_errors
++  
++        #  Also export the non-renamed variants
++        # (in case someone wants to rebuild mysqli-php or something similar)
++        # See MDEV-4127
++        default_charset_info
++        get_charset
++        get_charset_by_csname
++        net_realloc
++        client_errors
++        THR_KEY_mysys
++      )  
++    
++      # Add special script to fix symbols renames by Fedora
++      SET(CLIENT_SOURCES_EXTRA rpm_support.cc)
++      SET(VERSION_SCRIPT_TEMPLATE 
++      ${CMAKE_CURRENT_SOURCE_DIR}/libmysql_rpm_version.in)	  
++    ELSEIF(DEB)
++      # libmyodbc on Ubuntu is using functions below
++      # If we don't export them, linker would just remove 
++      # them (they are not used inside libmysqlclient)
++      SET(CLIENT_API_EXTRA
++        strfill
++        init_dynamic_string
++      )
++      # MySQL supplied with Ubuntu does not have versioning, bug Debian does.
++      IF(DEB MATCHES "debian") 
++        SET(VERSION_SCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/libmysql.ver.in)
++      ENDIF()
++    ENDIF()
    
 -  # Also list of exported symbols in distributions may differ from what is
 -  # considered official API. Define CLIENT_API_5_1_EXTRA for the set of
 -  # symbols, that required to be exported on different platforms.
-+  # Also list of exported symbols in distributions may differ from what is considered
-+  # official API. Define CLIENT_API_EXTRA for the set of symbols, that required to
-+  # be exported on different platforms.
++    IF(VERSION_SCRIPT_TEMPLATE)
++      # Generate version script.  
++      # Create semicolon separated lists of functions to export from 
++      # Since RPM packages use separate versioning for 5.1 API
++      # and 5.5 API (libmysqlclient_16 vs libmysqlclient_18), 
++      # we need 2 lists.
++      SET (CLIENT_API_5_1_LIST)
++      FOREACH (f ${CLIENT_API_FUNCTIONS_5_1})
++        SET(CLIENT_API_5_1_LIST "${CLIENT_API_5_1_LIST}\n${f};")
++      ENDFOREACH()
++  	
++      SET (CLIENT_API_5_5_LIST)
++      FOREACH (f ${CLIENT_API_FUNCTIONS_5_5})
++        SET(CLIENT_API_5_5_LIST "${CLIENT_API_5_5_LIST}\n${f};")
++      ENDFOREACH()
    
 -  # Fedora & Co declared following functions as part of API 
 -  SET(CLIENT_API_5_1_EXTRA
@@ -141,14 +201,26 @@ diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMa
 -    make_scrambled_password_323
 -  )
 -
--  # Linker script to version symbols in Fedora- and Debian- compatible way, MDEV-5529
--  SET(VERSION_SCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/libmysql_versions.ld.in)
--
 -  # Generate version script.  
 -  # Create semicolon separated lists of functions to export from 
 -  # Since RPM packages use separate versioning for 5.1 API
 -  # and 5.5 API (libmysqlclient_16 vs libmysqlclient_18), 
 -  # we need 2 lists.
+-  SET (VERSION_HEADER
+-"VERSION {
+-  libmysqlclient_18 {
+-    global:")
+-  SET (VERSION_FOOTER
+-"    local:
+-      *;
+-  };
+-
+-  libmysqlclient_16 {
+-    /* empty here. aliases are added above */
+-  };
+-}
+-")
+-
 -  SET (CLIENT_API_5_1_LIST)
 -  SET (CLIENT_API_5_1_ALIASES)
 -  FOREACH (f ${CLIENT_API_FUNCTIONS_5_1} ${CLIENT_API_5_1_EXTRA})
@@ -161,6 +233,21 @@ diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMa
 -    SET(CLIENT_API_5_5_LIST "${CLIENT_API_5_5_LIST}\t${f};\n")
 -  ENDFOREACH()
 -
+-  ELSE (NOT DISABLE_LIBMYSQLCLIENT_SYMBOL_VERSIONING)
+-    SET (CLIENT_API_5_1_ALIASES "/* Versioning disabled per user request. MDEV-5982 */")
++      CONFIGURE_FILE(
++        ${VERSION_SCRIPT_TEMPLATE}
++        ${CMAKE_CURRENT_BINARY_DIR}/libmysql.version
++        @ONLY@
++      )
++      SET(VERSION_SCRIPT_LINK_FLAGS 
++        "-Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/libmysql.version")
++    ENDIF()
+   ENDIF (NOT DISABLE_LIBMYSQLCLIENT_SYMBOL_VERSIONING)
+ 
+-  # Linker script to version symbols in Fedora- and Debian- compatible way, MDEV-5529
+-  SET(VERSION_SCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/libmysql_versions.ld.in)
+-
 -  CONFIGURE_FILE(
 -    ${VERSION_SCRIPT_TEMPLATE}
 -    ${CMAKE_CURRENT_BINARY_DIR}/libmysql_versions.ld
@@ -168,72 +255,11 @@ diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMa
 -  )
 -  SET(VERSION_SCRIPT_LINK_FLAGS 
 -    "-Wl,${CMAKE_CURRENT_BINARY_DIR}/libmysql_versions.ld")
-+  IF(RPM)
-+    # Fedora & Co declared following functions as part of API 
-+    SET(CLIENT_API_EXTRA
-+      mysql_default_charset_info
-+      mysql_get_charset
-+      mysql_get_charset_by_csname
-+      mysql_net_realloc
-+      mysql_client_errors
-+
-+      #  Also export the non-renamed variants
-+      # (in case someone wants to rebuild mysqli-php or something similar)
-+      # See MDEV-4127
-+      default_charset_info
-+      get_charset
-+      get_charset_by_csname
-+      net_realloc
-+      client_errors
-+      THR_KEY_mysys
-+    )  
-+  
-+    # Add special script to fix symbols renames by Fedora
-+    SET(CLIENT_SOURCES_EXTRA rpm_support.cc)
-+    SET(VERSION_SCRIPT_TEMPLATE 
-+    ${CMAKE_CURRENT_SOURCE_DIR}/libmysql_rpm_version.in)	  
-+  ELSEIF(DEB)
-+    # libmyodbc on Ubuntu is using functions below
-+    # If we don't export them, linker would just remove 
-+    # them (they are not used inside libmysqlclient)
-+    SET(CLIENT_API_EXTRA
-+      strfill
-+      init_dynamic_string
-+    )
-+    # MySQL supplied with Ubuntu does not have versioning, bug Debian does.
-+    IF(DEB MATCHES "debian") 
-+      SET(VERSION_SCRIPT_TEMPLATE ${CMAKE_CURRENT_SOURCE_DIR}/libmysql.ver.in)
-+    ENDIF()
-+  ENDIF()
-+
-+  IF(VERSION_SCRIPT_TEMPLATE)
-+    # Generate version script.  
-+    # Create semicolon separated lists of functions to export from 
-+    # Since RPM packages use separate versioning for 5.1 API
-+    # and 5.5 API (libmysqlclient_16 vs libmysqlclient_18), 
-+    # we need 2 lists.
-+    SET (CLIENT_API_5_1_LIST)
-+    FOREACH (f ${CLIENT_API_FUNCTIONS_5_1})
-+      SET(CLIENT_API_5_1_LIST "${CLIENT_API_5_1_LIST}\n${f};")
-+    ENDFOREACH()
-+	
-+    SET (CLIENT_API_5_5_LIST)
-+    FOREACH (f ${CLIENT_API_FUNCTIONS_5_5})
-+      SET(CLIENT_API_5_5_LIST "${CLIENT_API_5_5_LIST}\n${f};")
-+    ENDFOREACH()
-+
-+    CONFIGURE_FILE(
-+      ${VERSION_SCRIPT_TEMPLATE}
-+      ${CMAKE_CURRENT_BINARY_DIR}/libmysql.version
-+      @ONLY@
-+    )
-+    SET(VERSION_SCRIPT_LINK_FLAGS 
-+      "-Wl,--version-script=${CMAKE_CURRENT_BINARY_DIR}/libmysql.version")
-+  ENDIF()
+-
+ ENDIF(CMAKE_SYSTEM_NAME MATCHES "Linux")
  
- ENDIF()
  
-@@ -392,7 +344,6 @@ MERGE_LIBRARIES(mysqlclient STATIC ${LIB
+@@ -430,7 +364,6 @@ MERGE_LIBRARIES(mysqlclient STATIC ${LIB
  # Visual Studio users need debug  static library for debug projects
  IF(MSVC)
   INSTALL_DEBUG_TARGET(mysqlclient DESTINATION ${INSTALL_LIBDIR}/debug)
@@ -241,18 +267,16 @@ diff -up mariadb-5.5.44/libmysql/CMakeLists.txt.orig mariadb-5.5.44/libmysql/CMa
  ENDIF()
  
  IF(UNIX)
-@@ -411,9 +362,7 @@ IF(UNIX)
- ENDIF()
+@@ -450,7 +383,7 @@ ENDIF()
  
  IF(NOT DISABLE_SHARED)
--  MERGE_LIBRARIES(libmysql SHARED ${LIBS}
+   MERGE_LIBRARIES(libmysql SHARED ${LIBS}
 -    EXPORTS ${CLIENT_API_FUNCTIONS} ${CLIENT_API_5_1_EXTRA} ${CLIENT_API_5_5_EXTRA}
--    COMPONENT SharedLibraries)
-+  MERGE_LIBRARIES(libmysql SHARED ${LIBS} EXPORTS ${CLIENT_API_FUNCTIONS} ${CLIENT_API_EXTRA} COMPONENT SharedLibraries)
++    EXPORTS ${CLIENT_API_FUNCTIONS} ${CLIENT_API_EXTRA}
+     COMPONENT SharedLibraries)
    IF(UNIX)
      # libtool compatability
-     IF(CMAKE_SYSTEM_NAME MATCHES "FreeBSD" OR APPLE)
-@@ -430,8 +379,11 @@ IF(NOT DISABLE_SHARED)
+@@ -468,8 +401,11 @@ IF(NOT DISABLE_SHARED)
        SOVERSION "${SHARED_LIB_MAJOR_VERSION}")
      IF(LINK_FLAG_NO_UNDEFINED OR VERSION_SCRIPT_LINK_FLAGS)
        GET_TARGET_PROPERTY(libmysql_link_flags libmysql LINK_FLAGS)

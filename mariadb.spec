@@ -5,7 +5,7 @@
 %bcond_with tokudb
 
 Name: %{?scl_prefix}mariadb
-Version: 5.5.44
+Version: 5.5.53
 Release: 1%{?dist}
 
 Summary: A community developed branch of MySQL
@@ -326,7 +326,7 @@ done
     cd mysql-test
     perl ./mysql-test-run.pl --force --retry=0 \
 	--skip-test-list=rh-skipped-tests.list \
-	--suite-timeout=720 --testcase-timeout=30 || :
+	--suite-timeout=720 --testcase-timeout=30
     # cmake build scripts will install the var cruft if left alone :-(
     rm -rf var
   ) 
@@ -701,6 +701,20 @@ fi
 %{_mandir}/man1/mysql_client_test.1*
 
 %changelog
+* Fri Oct 21 2016 Honza Horak <hhorak@redhat.com> - 5.5.53-1
+- Rebase to 5.5.53
+  Resolves: #1386744
+  Also fix: CVE-2016-6662
+
+* Mon Jul 25 2016 Jakub Dorňák <jdornak@redhat.com> - 5.5.50-1
+- Rebase to 5.5.50
+  Resolves: #1359866
+
+* Tue Jun 14 2016 Jakub Dorňák <jdornak@redhat.com> - 5.5.49-1
+- Rebase to 5.5.49
+  https://mariadb.com/kb/en/mariadb/mariadb-5549-release-notes/
+  Resolves: #1342454
+
 * Tue Jul 28 2015 Jakub Dorňák <jdornak@redhat.com> - 5.5.44-1
 - Rebase to 5.5.44
   Also fix: CVE-2015-0501 CVE-2015-2568 CVE-2015-0499 CVE-2015-2571
