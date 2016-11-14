@@ -153,7 +153,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.1
-%global bugfixver 14
+%global bugfixver 16
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -161,7 +161,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          2%{?with_debug:.debug}%{?dist}
+Release:          1%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -222,15 +222,6 @@ Patch38:          %{pkgnamepatch}-servicename.patch
 Patch40:          %{pkgnamepatch}-galera.cnf.patch
 Patch41:          %{pkgnamepatch}-galera-new-cluster-help.patch
 Patch42:          %{pkgnamepatch}-galera-new-cluster-init.patch
-
-# Patches for bundled pcre
-# Fix CVE-2016-3191 (workspace overflow for (*ACCEPT) with deeply nested
-# parentheses), upstream bug #1791, fixed in upstream after 8.38
-Patch50:          pcre-8.38-Fix-workspace-overflow-for-ACCEPT-with-deeply-nested.patch
-# Fix CVE-2016-1283 (heap buffer overflow in handling of nested duplicate named
-# groups with a nested back reference), bug #1295386, upstream bug #1767,
-# fixed in upstream after 8.38
-Patch51:          pcre-8.38-Yet-another-duplicate-name-bugfix-by-overestimating-.patch
 
 # Patches specific for scl
 Patch90:          %{pkgnamepatch}-scl-env-check.patch
@@ -628,11 +619,6 @@ MariaDB is a community developed branch of MySQL.
 %if %{without init_systemd}
 %patch42 -p1
 %endif
-
-pushd pcre
-%patch50 -p1
-%patch51 -p1
-popd
 
 sed -i -e 's/2.8.7/2.6.4/g' cmake/cpack_rpm.cmake
 
@@ -1230,9 +1216,10 @@ fi
 %if %{with galera}
 %files server-galera
 %doc Docs/README.wsrep LICENSE.clustercheck
-%{_bindir}/galera_new_cluster
 %{_bindir}/clustercheck
+%{_bindir}/galera_new_cluster
 %if %{with init_systemd}
+%{_bindir}/galera_recovery
 %{_datadir}/%{pkg_name}/systemd/use_galera_new_cluster.conf
 %endif
 %config(noreplace) %{_sysconfdir}/my.cnf.d/galera.cnf
@@ -1429,6 +1416,10 @@ fi
 %endif
 
 %changelog
+* Tue Jul 26 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.16-1
+- Rebase to version 10.1.16
+  Resolves: #1359870
+
 * Thu May 12 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.14-2
 - Fixed selinux policy removal
   Related: #1333007
