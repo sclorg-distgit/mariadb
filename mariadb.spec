@@ -152,7 +152,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.0
-%global bugfixver 25
+%global bugfixver 26
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -160,7 +160,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          4%{?with_debug:.debug}%{?dist}
+Release:          2%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -211,15 +211,7 @@ Patch31:          %{pkgnamepatch}-string-overflow.patch
 Patch32:          %{pkgnamepatch}-basedir.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
-
-# Patches for bundled pcre
-# Fix CVE-2016-3191 (workspace overflow for (*ACCEPT) with deeply nested
-# parentheses), upstream bug #1791, fixed in upstream after 8.38
-Patch50:          pcre-8.38-Fix-workspace-overflow-for-ACCEPT-with-deeply-nested.patch
-# Fix CVE-2016-1283 (heap buffer overflow in handling of nested duplicate named
-# groups with a nested back reference), bug #1295386, upstream bug #1767,
-# fixed in upstream after 8.38
-Patch51:          pcre-8.38-Yet-another-duplicate-name-bugfix-by-overestimating-.patch
+Patch38:          %{pkgnamepatch}-test-multi_update.patch
 
 # Patches specific for scl
 Patch90:          %{pkgnamepatch}-scl-env-check.patch
@@ -253,6 +245,10 @@ BuildRequires:    perl(Time::HiRes)
 # for running some openssl tests rhbz#1189180
 BuildRequires:    openssl
 %{?with_init_systemd:BuildRequires: systemd}
+%if 0%{?rhel} == 6
+# in rhel 6 there is no implicit requirement for scl runtime
+BuildRequires:    %{?scl_prefix}runtime
+%endif
 
 Requires:         bash
 Requires:         fileutils
@@ -409,11 +405,7 @@ Group:            Applications/Databases
 Requires:         %{name}-server%{?_isa} = %{sameevr}
 %{?scl:Requires:%scl_runtime}
 # boost and Judy required for oograph
-%if 0%{?fedora} >= 15 || 0%{?rhel} >= 7
 BuildRequires:    boost-devel
-%else
-BuildRequires:    %{?scl_prefix}boost-devel
-%endif
 BuildRequires:    %{?scl_prefix}Judy-devel
 
 %description      oqgraph-engine
@@ -581,15 +573,11 @@ MariaDB is a community developed branch of MySQL.
 %patch32 -p1
 %patch34 -p1
 %patch37 -p1
+%patch38 -p1
 
 # removing bundled cmd-line-utils is now disabled
 # we cannot use libedit due #1201988
 # rm -r cmd-line-utils
-
-pushd pcre
-%patch50 -p1
-%patch51 -p1
-popd
 
 sed -i -e 's/2.8.7/2.6.4/g' cmake/cpack_rpm.cmake
 
@@ -1302,23 +1290,32 @@ fi
 %endif
 
 %changelog
+* Mon Aug  1 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.26-2
+- Always build with boost-devel (do not use rh-mariadb100-boost-devel)
+  Related: #1359868
+
+* Tue Jul 26 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.26-1
+- Rebase to version 10.0.26
+  Resolves: #1359868
+  Also fixes: CVE-2016-3477 CVE-2016-3521 CVE-2016-3615 CVE-2016-5440
+
 * Thu May 12 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-4
   Fixed Provides
   (Provides bundled pcre)
-  Related: #1330490
+  Related: #1330491
 
 * Tue May 10 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-3
   Fixed testsuite
   (couldn't find libmytap.so)
-  Related: #1330490
+  Related: #1330491
 
 * Fri May  6 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-2
 - Fix CVE-2016-3191 and CVE-2016-1283
-  Resolves: #1330490
+  Resolves: #1330491
 
 * Thu May  5 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.25-1
 - Rebase to version 10.0.25
-  Resolves: #1330444
+  Resolves: #1330445
   Also fixes: CVE-2016-2047 CVE-2016-0668 CVE-2016-0666 CVE-2016-0655
   CVE-2016-0651 CVE-2016-0650 CVE-2016-0649 CVE-2016-0648 CVE-2016-0647
   CVE-2016-0646 CVE-2016-0644 CVE-2016-0643 CVE-2016-0642 CVE-2016-0641
