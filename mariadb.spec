@@ -5,7 +5,7 @@
 %bcond_with tokudb
 
 Name: %{?scl_prefix}mariadb
-Version: 5.5.44
+Version: 5.5.53
 Release: 1%{?dist}
 
 Summary: A community developed branch of MySQL
@@ -52,7 +52,6 @@ Patch11: mariadb-string-overflow.patch
 Patch14: mariadb-basedir.patch
 Patch15: mariadb-covscan-signexpr.patch
 Patch16: mariadb-covscan-stroverflow.patch
-Patch17: mariadb-ssltest.patch
 Patch101: mariadb-scl-env-check.patch
 
 BuildRequires: perl, readline-devel, openssl-devel
@@ -196,7 +195,6 @@ MariaDB is a community developed branch of MySQL.
 %patch14 -p1
 %patch15 -p1
 %patch16 -p1
-%patch17 -p1
 
 # path fixes in source for dsc - using sed instead of patching, 
 # because we would need various patches for various collections
@@ -710,6 +708,20 @@ rm -f ${RPM_BUILD_ROOT}%{_datadir}/mysql/solaris/postinstall-solaris
 %{_mandir}/man1/mysql_client_test.1*
 
 %changelog
+* Fri Oct 21 2016 Honza Horak <hhorak@redhat.com> - 5.5.53-1
+- Rebase to 5.5.53
+  Resolves: #1386744
+  Also fix: CVE-2016-6662
+
+* Mon Jul 25 2016 Jakub Dorňák <jdornak@redhat.com> - 5.5.50-1
+- Rebase to 5.5.50
+  Resolves: #1359866
+
+* Tue Jun 14 2016 Jakub Dorňák <jdornak@redhat.com> - 5.5.49-1
+- Rebase to 5.5.49
+  https://mariadb.com/kb/en/mariadb/mariadb-5549-release-notes/
+  Resolves: #1342454
+
 * Tue Jul 28 2015 Jakub Dorňák <jdornak@redhat.com> - 5.5.44-1
 - Rebase to 5.5.44
   Also fix: CVE-2015-0501 CVE-2015-2568 CVE-2015-0499 CVE-2015-2571
