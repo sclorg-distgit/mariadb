@@ -1,0 +1,21 @@
+The warning is now being suppressed at the beginning of the test:
+CALL mtr.add_suppression("Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT.");
+
+--- mariadb-10.0.26/mysql-test/r/multi_update.result.orig	2016-06-23 11:24:42.000000000 +0200
++++ mariadb-10.0.26/mysql-test/r/multi_update.result	2016-07-28 08:55:18.440615246 +0200
+@@ -1054,7 +1054,6 @@ UPDATE IGNORE table_11757486 SET field1=
+ Warnings:
+ Warning	1264	Out of range value for column 'field1' at row 1
+ Warning	1264	Out of range value for column 'field1' at row 2
+-Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. UPDATE IGNORE is unsafe because the order in which rows are updated determines which (if any) rows are ignored. This order cannot be predicted and may differ on master and the slave.
+ UPDATE (SELECT 128 as col1) x, table_11757486 SET field1=x.col1;
+ ERROR 22003: Out of range value for column 'field1' at row 1
+ UPDATE table_11757486 SET field1=128;
+@@ -1068,7 +1067,6 @@ UPDATE IGNORE table_11757486 SET field1=
+ Warnings:
+ Warning	1264	Out of range value for column 'field1' at row 1
+ Warning	1264	Out of range value for column 'field1' at row 2
+-Note	1592	Unsafe statement written to the binary log using statement format since BINLOG_FORMAT = STATEMENT. UPDATE IGNORE is unsafe because the order in which rows are updated determines which (if any) rows are ignored. This order cannot be predicted and may differ on master and the slave.
+ DROP TABLE table_11757486;
+ SET SESSION SQL_MODE=default;
+ end of 10.0 tests
