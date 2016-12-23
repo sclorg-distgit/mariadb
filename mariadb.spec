@@ -8,10 +8,10 @@
 # Regression tests may take a long time (many cores recommended), skip them by
 # passing --nocheck to rpmbuild or by setting runselftest to 0 if defining
 # --nocheck is not possible (e.g. in koji build)
-%{!?runselftest:%global runselftest 1}
+%{!?runselftest:%global runselftest 0}
 
 # Set this to 1 to see which tests fail
-%global check_testsuite 0
+%global ignore_testsuite_result 0
 
 # In f20+ use unversioned docdirs, otherwise the old versioned one
 %global _pkgdocdirname %{pkg_name}%{!?_pkgdocdir:-%{version}}
@@ -98,6 +98,7 @@
 
 # MariaDB 10.0 and later requires pcre >= 8.35, otherwise we need to use
 # the bundled library, since the package cannot be build with older version
+%global pcre_version 8.39
 %if 0%{?fedora} >= 21
 %bcond_without pcre
 %else
@@ -152,7 +153,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.0
-%global bugfixver 26
+%global bugfixver 28
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -160,7 +161,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          2%{?with_debug:.debug}%{?dist}
+Release:          5%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -204,6 +205,7 @@ Patch8:           %{pkgnamepatch}-install-db-sharedir.patch
 Patch9:           %{pkgnamepatch}-ownsetup.patch
 Patch10:          %{pkgnamepatch}-noclientlib.patch
 Patch12:          %{pkgnamepatch}-admincrash.patch
+Patch13:          %{pkgnamepatch}-ssl-cypher.patch
 
 # Patches specific for this mysql package
 Patch30:          %{pkgnamepatch}-errno.patch
@@ -227,7 +229,7 @@ BuildRequires:    zlib-devel
 BuildRequires:    pam-devel
 # use either new enough version of pcre or provide bundles(pcre)
 %{?with_pcre:BuildRequires: pcre-devel >= 8.35}
-%{!?with_pcre:Provides: bundled(pcre) = 8.38}
+%{!?with_pcre:Provides: bundled(pcre) = %{pcre_version}}
 # Tests requires time and ps and some perl modules
 BuildRequires:    procps
 BuildRequires:    time
@@ -242,6 +244,7 @@ BuildRequires:    perl(Socket)
 BuildRequires:    perl(Sys::Hostname)
 BuildRequires:    perl(Test::More)
 BuildRequires:    perl(Time::HiRes)
+BuildRequires:    perl(Symbol)
 # for running some openssl tests rhbz#1189180
 BuildRequires:    openssl
 %{?with_init_systemd:BuildRequires: systemd}
@@ -523,7 +526,7 @@ MariaDB is a community developed branch of MySQL.
 
 %if %{with test}
 %package          test
-Summary:          The test suite distributed with MariaD
+Summary:          The test suite distributed with MariaDB
 Group:            Applications/Databases
 Requires:         %{name}%{?_isa} = %{sameevr}
 Requires:         %{name}-common%{?_isa} = %{sameevr}
@@ -568,6 +571,7 @@ MariaDB is a community developed branch of MySQL.
 %patch9 -p1
 %patch10 -p1
 %patch12 -p1
+%patch13 -p1
 %patch30 -p1
 %patch31 -p1
 %patch32 -p1
@@ -603,6 +607,20 @@ cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
 %if 0%{?scl:1}
 %patch90 -p1
 %endif
+
+# Check if PCRE version is actual
+%{!?with_pcre:
+pcre_maj=`grep '^m4_define(pcre_major' pcre/configure.ac | sed -r 's/^m4_define\(pcre_major, \[([0-9]+)\]\)/\1/'`
+pcre_min=`grep '^m4_define(pcre_minor' pcre/configure.ac | sed -r 's/^m4_define\(pcre_minor, \[([0-9]+)\]\)/\1/'`
+
+if [ %{pcre_version} != "$pcre_maj.$pcre_min" ]
+then
+  echo "\n PCRE version is outdated. \n\tIncluded version:%{pcre_version} \n\tUpstream version: $pcre_maj.$pcre_min\n"
+  exit 1
+fi
+}
+
+
 
 %build
 
@@ -740,7 +758,7 @@ install -p -m 0755 scripts/mysql_config_multilib %{buildroot}%{_bindir}/mysql_co
 # but that's pretty wacko --- see also %%{name}-file-contents.patch)
 install -p -m 644 Docs/INFO_SRC %{buildroot}%{_libdir}/mysql/
 install -p -m 644 Docs/INFO_BIN %{buildroot}%{_libdir}/mysql/
-rm -rf %{buildroot}%{_pkgdocdir}/MariaDB-server-%{version}/
+rm -r %{buildroot}%{_datadir}/doc/%{_pkgdocdirname}/MariaDB-server-%{version}/
 
 mkdir -p %{buildroot}%{logfiledir}
 chmod 0750 %{buildroot}%{logfiledir}
@@ -850,6 +868,9 @@ rm -f %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 # remove solaris files
 rm -rf %{buildroot}%{_datadir}/%{pkg_name}/solaris/
 
+# remove *.jar file from mysql-test
+rm -rf %{buildroot}%{_datadir}/mysql-test/plugin/connect/connect/std_data/JdbcMariaDB.jar
+
 %if %{without clibrary}
 unlink %{buildroot}%{_libdir}/mysql/libmysqlclient.so
 unlink %{buildroot}%{_libdir}/mysql/libmysqlclient_r.so
@@ -917,7 +938,7 @@ cat << EOF | tee -a %{buildroot}%{?_scl_scripts}/service-environment
 # environment (like environment variable values). As a consequence,
 # information of all enabled collections will be lost during service start up.
 # If user needs to run a service under any software collection enabled, this
-# collection has to be written into %{scl_upper}_SCLS_ENABLED variable 
+# collection has to be written into %{scl_upper}_SCLS_ENABLED variable
 # in %{?_scl_scripts}/service-environment.
 %{scl_upper}_SCLS_ENABLED="%{scl}"
 EOF
@@ -953,7 +974,7 @@ export MTR_BUILD_THREAD=%{__isa_bits}
     --suite-timeout=720 --testcase-timeout=30 \
     --mysqld=--binlog-format=mixed --force-restart \
     --shutdown-timeout=60 --max-test-fail=0 \
-%if %{check_testsuite}
+%if %{ignore_testsuite_result}
     || :
 %else
     --skip-test-list=rh-skipped-tests.list
@@ -1290,6 +1311,16 @@ fi
 %endif
 
 %changelog
+* Tue Nov 22 2016 Michal Schorm <mschorm@redhat.com> - 1:10.0.28-5
+- Rebase to 10.0.28
+- JdbcMariaDB.jar test removed
+- PCRE version check added
+- Tests blacklist updated
+  Related: #1393306, #1396945
+  Also fixes: CVE-2016-3492 CVE-2016-5612 CVE-2016-5616 CVE-2016-5624
+              CVE-2016-5626 CVE-2016-5629 CVE-2016-5630 CVE-2016-6662
+              CVE-2016-6663 CVE-2016-8283
+
 * Mon Aug  1 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.0.26-2
 - Always build with boost-devel (do not use rh-mariadb100-boost-devel)
   Related: #1359868
