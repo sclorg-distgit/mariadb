@@ -99,6 +99,7 @@
 
 # MariaDB 10.0 and later requires pcre >= 8.35, otherwise we need to use
 # the bundled library, since the package cannot be build with older version
+%global pcre_version 8.39
 %if 0%{?fedora} >= 21
 %bcond_without pcre
 %else
@@ -153,7 +154,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.1
-%global bugfixver 16
+%global bugfixver 19
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -161,7 +162,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          1%{?with_debug:.debug}%{?dist}
+Release:          6%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -229,7 +230,6 @@ Patch90:          %{pkgnamepatch}-scl-env-check.patch
 BuildRequires:    cmake
 BuildRequires:    libaio-devel
 BuildRequires:    libedit-devel
-BuildRequires:    openssl-devel
 BuildRequires:    ncurses-devel
 BuildRequires:    perl
 BuildRequires:    systemtap-sdt-devel
@@ -238,7 +238,7 @@ BuildRequires:    zlib-devel
 BuildRequires:    pam-devel
 # use either new enough version of pcre or provide bundles(pcre)
 %{?with_pcre:BuildRequires: pcre-devel >= 8.35}
-%{!?with_pcre:Provides: bundled(pcre) = 8.38}
+%{!?with_pcre:Provides: bundled(pcre) = %{pcre_version}}
 # Tests requires time and ps and some perl modules
 BuildRequires:    procps
 BuildRequires:    time
@@ -254,8 +254,12 @@ BuildRequires:    perl(Socket)
 BuildRequires:    perl(Sys::Hostname)
 BuildRequires:    perl(Test::More)
 BuildRequires:    perl(Time::HiRes)
+BuildRequires:    perl(Symbol)
+
 # for running some openssl tests rhbz#1189180
 BuildRequires:    openssl
+BuildRequires:    openssl-devel
+
 %if %{with galera}
 BuildRequires:    selinux-policy-devel
 %endif
@@ -564,7 +568,7 @@ MariaDB is a community developed branch of MySQL.
 
 %if %{with test}
 %package          test
-Summary:          The test suite distributed with MariaD
+Summary:          The test suite distributed with MariaDB
 Group:            Applications/Databases
 Requires:         %{name}%{?_isa} = %{sameevr}
 Requires:         %{name}-common%{?_isa} = %{sameevr}
@@ -654,6 +658,20 @@ sed -i 's/kerberos_port_t/kerberos_master_port_t/' selinux/%{name}-server-galera
 %endif
 cat selinux/%{name}-server-galera.te
 %endif
+
+# Check if PCRE version is actual
+%{!?with_pcre:
+pcre_maj=`grep '^m4_define(pcre_major' pcre/configure.ac | sed -r 's/^m4_define\(pcre_major, \[([0-9]+)\]\)/\1/'`
+pcre_min=`grep '^m4_define(pcre_minor' pcre/configure.ac | sed -r 's/^m4_define\(pcre_minor, \[([0-9]+)\]\)/\1/'`
+
+if [ %{pcre_version} != "$pcre_maj.$pcre_min" ]
+then
+  echo "\n PCRE version is outdated. \n\tIncluded version:%{pcre_version} \n\tUpstream version: $pcre_maj.$pcre_min\n"
+  exit 1
+fi
+}
+
+
 
 %build
 
@@ -934,8 +952,14 @@ rm -f %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 # remove solaris files
 rm -rf %{buildroot}%{_datadir}/%{pkg_name}/solaris/
 
+# remove *.jar file from mysql-test
+rm -rf %{buildroot}%{_datadir}/mysql-test/plugin/connect/connect/std_data/JdbcMariaDB.jar
+
 # rename the wsrep README so it corresponds with the other README names
 mv Docs/README-wsrep Docs/README.wsrep
+
+# remove *.jar file from mysql-test
+rm -rf %{buildroot}%{_datadir}/mysql-test/plugin/connect/connect/std_data/JdbcMariaDB.jar
 
 %if %{without clibrary}
 unlink %{buildroot}%{_libdir}/mysql/libmysqlclient.so
@@ -1416,6 +1440,14 @@ fi
 %endif
 
 %changelog
+* Wed Nov 23 2016 Michal Schorm <mschorm@redhat.com> - 1:10.1.19-6
+- Rebase to version 10.1.19
+- JdbcMariaDB.jar test removed
+- PCRE version check added
+  Related: #1393306, #1396934
+  Also fix: CVE-2016-3492 CVE-2016-5616 CVE-2016-5624 CVE-2016-5626
+            CVE-2016-5629 CVE-2016-6662 CVE-2016-6663 CVE-2016-8283
+
 * Tue Jul 26 2016 Jakub Dorňák <jdornak@redhat.com> - 1:10.1.16-1
 - Rebase to version 10.1.16
   Resolves: #1359870
