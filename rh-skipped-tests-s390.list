@@ -1,0 +1,5 @@
+gcol.gcol_column_def_options_innodb          : rhbz#1462836
+gcol.gcol_column_def_options_myisam          : rhbz#1462836
+unit.conc_features-10_2                      : rhbz#1462836
+unit.conc_misc                               : rhbz#1462836
+perfschema.bad_option_5                      : rhbz#1462836

@@ -1,0 +1,2 @@
+rocksdb.use_direct_reads_writes              : rhbz#1462836
+main.index_merge_innodb                      : rhbz#1462836

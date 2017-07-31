@@ -1,0 +1,12 @@
+diff -up mariadb-10.2.6/scripts/galera_recovery.sh.newpatch mariadb-10.2.6/scripts/galera_recovery.sh
+--- mariadb-10.2.6/scripts/galera_recovery.sh.newpatch	2017-06-26 10:46:52.143445636 +0200
++++ mariadb-10.2.6/scripts/galera_recovery.sh	2017-06-26 10:48:01.666569584 +0200
+@@ -68,7 +68,7 @@ parse_arguments() {
+ 
+ wsrep_recover_position() {
+   # Redirect server's error log to the log file.
+-  eval /usr/sbin/mysqld $cmdline_args --user=$user --wsrep_recover \
++  eval @libexecdir@/mysqld $cmdline_args --user=$user --wsrep_recover \
+     --log-error="$log_file"
+   ret=$?
+   if [ $ret -ne 0 ]; then

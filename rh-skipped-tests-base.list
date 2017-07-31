@@ -1,0 +1,3 @@
+# These tests fail with MariaDB 10.2:
+
+rocksdb.shutdown                             : rhbz#1096787
