@@ -1,6 +1,6 @@
-diff -up mariadb-10.2.6/scripts/CMakeLists.txt.p7 mariadb-10.2.6/scripts/CMakeLists.txt
---- mariadb-10.2.6/scripts/CMakeLists.txt.p7	2017-06-18 09:27:16.716150987 +0200
-+++ mariadb-10.2.6/scripts/CMakeLists.txt	2017-06-18 09:28:54.321193237 +0200
+diff -up mariadb-10.2.7/scripts/CMakeLists.txt.p7 mariadb-10.2.7/scripts/CMakeLists.txt
+--- mariadb-10.2.7/scripts/CMakeLists.txt.p7	2017-08-01 22:39:39.568209484 +0200
++++ mariadb-10.2.7/scripts/CMakeLists.txt	2017-08-01 22:41:32.810599345 +0200
 @@ -309,6 +309,34 @@ ELSE()
        COMPONENT ${${file}_COMPONENT}
       )
@@ -12,12 +12,12 @@ diff -up mariadb-10.2.6/scripts/CMakeLists.txt.p7 mariadb-10.2.6/scripts/CMakeLi
 +    mysql@.service
 +    mysql-prepare-db-dir
 +    mysql-wait-ready
-+    mysql-wait-stop
 +    mysql-check-socket
 +    mysql-check-upgrade
 +    mysql-scripts-common
 +    mysql_config_multilib
 +    clustercheck
++    galera_new_cluster
 +    mysql.init
 +    my.cnf
 +  )

@@ -117,7 +117,7 @@ diff -up mariadb-10.2.6/scripts/mysql_install_db.sh.p90 mariadb-10.2.6/scripts/m
 diff -up mariadb-10.2.6/scripts/mysql.service.in.p90 mariadb-10.2.6/scripts/mysql.service.in
 --- mariadb-10.2.6/scripts/mysql.service.in.p90	2017-06-26 21:37:24.248934157 +0200
 +++ mariadb-10.2.6/scripts/mysql.service.in	2017-06-26 21:37:24.261934157 +0200
-@@ -34,14 +34,20 @@ Type=notify
+@@ -34,13 +34,19 @@ Type=notify
  User=mysql
  Group=mysql
  
@@ -136,22 +136,26 @@ diff -up mariadb-10.2.6/scripts/mysql.service.in.p90 mariadb-10.2.6/scripts/mysq
  # per bug #547485
 -ExecStart=@libexecdir@/mysqld --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 -ExecStartPost=@libexecdir@/mysql-check-upgrade
--ExecStopPost=@libexecdir@/mysql-wait-stop
 +ExecStart=@libexecdir@/mysqld-scl-helper enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysqld --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 +ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade
-+ExecStopPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-stop
  
  # Setting this to true can break replication and the Type=notify settings
  # See also bind-address mysqld option.
 diff -up mariadb-10.2.6/scripts/mysql@.service.in.p90 mariadb-10.2.6/scripts/mysql@.service.in
 --- mariadb-10.2.6/scripts/mysql@.service.in.p90	2017-06-26 21:37:24.254934157 +0200
 +++ mariadb-10.2.6/scripts/mysql@.service.in	2017-06-26 21:37:24.261934157 +0200
-@@ -41,14 +41,14 @@ Type=notify
+@@ -41,13 +41,19 @@ Type=notify
  User=mysql
  Group=mysql
  
 -ExecStartPre=@libexecdir@/mysql-check-socket
 -ExecStartPre=@libexecdir@/mysql-prepare-db-dir %n
++# Load collections set to enabled for this service
++EnvironmentFile=@SCL_SCRIPTS@/service-environment
++
++# We want to start server only inside "scl enable" invocation
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- /usr/bin/scl_enabled @SCL_NAME@
++
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir %n
  # MYSQLD_OPTS here is for users to set in /etc/systemd/system/@DAEMON_NAME@@.service.d/MY_SPECIAL.conf
@@ -159,10 +163,8 @@ diff -up mariadb-10.2.6/scripts/mysql@.service.in.p90 mariadb-10.2.6/scripts/mys
  # per bug #547485
 -ExecStart=@libexecdir@/mysqld --defaults-group-suffix=.%I --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 -ExecStartPost=@libexecdir@/mysql-check-upgrade
--ExecStopPost=@libexecdir@/mysql-wait-stop
 +ExecStart=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysqld --defaults-group-suffix=.%I --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
 +ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade
-+ExecStopPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-wait-stop
  
  # Setting this to true can break replication and the Type=notify settings
  # See also bind-address mysqld option.

@@ -8,7 +8,7 @@
 # Regression tests may take a long time (many cores recommended), skip them by
 # passing --nocheck to rpmbuild or by setting runselftest to 0 if defining
 # --nocheck is not possible (e.g. in koji build)
-%{!?runselftest:%global runselftest 0}
+%{!?runselftest:%global runselftest 1}
 
 # Set this to 1 to see which tests fail, but 0 on production ready build
 %global ignore_testsuite_result 0
@@ -137,7 +137,11 @@
 %endif
 
 # Directory for storing pid file
+%if 0%{?rhel} == 6
 %global pidfiledir %{?scl:%{_root_localstatedir}}%{!?scl:%{_localstatedir}}/run/%{daemon_name}
+%else #RHEL 6
+%global pidfiledir %{_rundir}/%{daemon_name}
+%endif
 
 # We define some system's well known locations here so we can use them easily
 # later when building to another location (like SCL)
@@ -165,7 +169,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.2
-%global bugfixver 6
+%global bugfixver 7
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -173,22 +177,22 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          7%{?with_debug:.debug}%{?dist}
+Release:          6%{?with_debug:.debug}%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
 Group:            Applications/Databases
 URL:              http://mariadb.org
-# Exceptions allow client libraries to be linked with most open source SW,
-# not only GPL code.  See README.mysql-license
+# Exceptions allow client libraries to be linked with most open source SW, not only GPL code.  See README.mysql-license
 License:          GPLv2 with exceptions and LGPLv2 and BSD
 
-Source0:          http://mirrors.syringanetworks.net/mariadb/mariadb-%{version}/source/mariadb-%{version}.tar.gz
+Source0:          https://downloads.mariadb.org/interstitial/mariadb-%{version}/source/mariadb-%{version}.tar.gz
 Source2:          mysql_config_multilib.sh
 Source3:          my.cnf.in
 Source5:          README.mysql-cnf
 Source6:          README.mysql-docs
 Source7:          README.mysql-license
+Source8:          README.mariadb-devel
 Source10:         mysql.tmpfiles.d.in
 Source11:         mysql.service.in
 Source12:         mysql-prepare-db-dir.sh
@@ -196,7 +200,6 @@ Source13:         mysql-wait-ready.sh
 Source14:         mysql-check-socket.sh
 Source15:         mysql-scripts-common.sh
 Source16:         mysql-check-upgrade.sh
-Source17:         mysql-wait-stop.sh
 Source18:         mysql@.service.in
 Source19:         mysql.init.in
 Source40:         daemon-scl-helper.sh
@@ -223,11 +226,11 @@ Patch12:          %{pkgnamepatch}-admincrash.patch
 
 # Patches specific for this mysql package
 Patch30:          %{pkgnamepatch}-errno.patch
-Patch31:          %{pkgnamepatch}-string-overflow.patch
-Patch32:          %{pkgnamepatch}-basedir.patch
 Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
 Patch38:          %{pkgnamepatch}-servicename.patch
+# Patch only for 10.1.27, resolving FTBFS
+Patch39:          %{pkgnamepatch}-10.2.7.patch
 
 # Patches for galera
 Patch40:          %{pkgnamepatch}-galera.cnf.patch
@@ -239,10 +242,7 @@ Patch90:          %{pkgnamepatch}-scl-env-check.patch
 
 BuildRequires:    cmake
 BuildRequires:    libaio-devel
-# for Mariabackup tool, but this tool is only build if xtradb engine is built
-# and this one is currently disabled for 10.2, since it is not ready yet
-# https://jira.mariadb.org/browse/MDEV-12203
-#BuildRequires:    libarchive-devel
+BuildRequires:    libarchive-devel
 BuildRequires:    libedit-devel
 BuildRequires:    ncurses-devel
 BuildRequires:    perl
@@ -419,11 +419,12 @@ Requires:         mysql%{?_isa}
 Requires:         %{name}%{?_isa}
 %endif
 Requires:         %{name}-common%{?_isa} = %{sameevr}
-Requires:         %{_sysconfdir}/my.cnf
-Requires:         %{_sysconfdir}/my.cnf.d
 Requires:         %{name}-errmsg%{?_isa} = %{sameevr}
 Requires:         %{name}-server-utils%{?_isa} = %{sameevr}
+Requires:         %{_sysconfdir}/my.cnf
+Requires:         %{_sysconfdir}/my.cnf.d
 Requires:         coreutils
+# for fuser in mysql-check-socket
 Requires:         psmisc
 Requires(pre):    /usr/sbin/useradd
 %if %{with init_systemd}
@@ -664,11 +665,10 @@ MariaDB is a community developed branch of MySQL.
 %patch10 -p1
 %patch12 -p1
 %patch30 -p1
-%patch31 -p1
-%patch32 -p1
 %patch34 -p1
 %patch37 -p1
 %patch38 -p1
+%patch39 -p1
 %patch40 -p1
 %if %{without init_systemd}
 %patch42 -p1
@@ -695,7 +695,7 @@ cat %{SOURCE53} | tee -a mysql-test/unstable-tests
 %endif
 
 cp %{SOURCE2} %{SOURCE3} %{SOURCE10} %{SOURCE11} %{SOURCE12} %{SOURCE13} \
-   %{SOURCE14} %{SOURCE15} %{SOURCE16} %{SOURCE17} %{SOURCE18} %{SOURCE19} \
+   %{SOURCE14} %{SOURCE15} %{SOURCE16} %{SOURCE18} %{SOURCE19} \
    %{SOURCE70} scripts
 
 %if 0%{?scl:1}
@@ -725,7 +725,7 @@ fi
 }
 
 %if %{without rocksdb}
-rm -rf storage/rocksdb/
+rm -r storage/rocksdb/
 %endif
 
 %build
@@ -745,15 +745,11 @@ set -ex
 CFLAGS="%{optflags} -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE"
 # force PIC mode so that we can build libmysqld.so
 CFLAGS="$CFLAGS -fPIC"
-# GCC 4.9 causes segfaults: https://mariadb.atlassian.net/browse/MDEV-6360
-CFLAGS="$CFLAGS -fno-delete-null-pointer-checks"
-# gcc seems to have some bugs on sparc as of 4.4.1, back off optimization
-# submitted as bz #529298
+# gcc seems to have some bugs on sparc as of 4.4.1, back off optimization; rhbz#529298
 %ifarch sparc sparcv9 sparc64
 CFLAGS=`echo $CFLAGS| sed -e "s|-O2|-O1|g" `
 %endif
-# significant performance gains can be achieved by compiling with -O3 optimization
-# rhbz#1051069
+# significant performance gains can be achieved by compiling with -O3 optimization; rhbz#1051069
 %ifarch ppc64
 CFLAGS=`echo $CFLAGS| sed -e "s|-O2|-O3|g" `
 %endif
@@ -803,13 +799,13 @@ export LDFLAGS
          -DMYSQL_UNIX_ADDR="/var/lib/mysql/mysql.sock" \
          -DENABLED_LOCAL_INFILE=ON \
          -DENABLE_DTRACE=OFF \
-         -DWITH_LIBARCHIVE=OFF \
          -DWITH_EMBEDDED_SERVER=ON \
-         -DWITH_MARIABACKUP=OFF \
          -DWITH_SSL=system \
          -DWITH_ZLIB=system \
 %{?with_pcre: -DWITH_PCRE=system}\
          -DWITH_JEMALLOC=no \
+         -DWITH_LIBARCHIVE=ON \
+         -DWITH_MARIABACKUP=ON \
 %{!?with_tokudb: -DWITHOUT_TOKUDB=ON}\
 %{!?with_mroonga: -DWITHOUT_MROONGA=ON}\
 %{!?with_oqgraph: -DWITHOUT_OQGRAPH=ON}\
@@ -846,7 +842,7 @@ for header in mysql/my_config.h mysql/private/config.h; do
 %multilib_fix_c_header --file %{_includedir}/$header
 done
 
-# Multilib support for shell scripts
+# multilib support for shell scripts
 # we only apply this to known Red Hat multilib arches, per bug #181335
 if %multilib_capable; then
   cp scripts/mysql_config_multilib scripts/mariadb_config_multilib
@@ -896,7 +892,7 @@ install -D -p -m 644 scripts/mysql.service %{buildroot}%{_unitdir}/%{daemon_name
 install -D -p -m 644 scripts/mysql@.service %{buildroot}%{_unitdir}/%{daemon_name}@.service
 install -D -p -m 0644 scripts/mysql.tmpfiles.d %{buildroot}%{_tmpfilesdir}/%{name}.conf
 %if 0%{?mysqld_pid_dir:1}
-echo "d %{_root_localstatedir}/run/%{mysqld_pid_dir} 0755 mysql mysql -" >>%{buildroot}%{_tmpfilesdir}/%{name}.conf
+echo "d %{_rundir}/%{mysqld_pid_dir} 0755 mysql mysql -" >>%{buildroot}%{_tmpfilesdir}/%{name}.conf
 %endif
 %endif
 
@@ -907,11 +903,12 @@ install -D -p -m 755 scripts/mysql.init %{buildroot}%{daemondir}/%{daemon_name}
 
 # helper scripts for service starting
 install -p -m 755 scripts/mysql-prepare-db-dir %{buildroot}%{_libexecdir}/mysql-prepare-db-dir
-install -p -m 755 scripts/mysql-wait-ready %{buildroot}%{_libexecdir}/mysql-wait-ready
-install -p -m 755 scripts/mysql-wait-stop %{buildroot}%{_libexecdir}/mysql-wait-stop
 install -p -m 755 scripts/mysql-check-socket %{buildroot}%{_libexecdir}/mysql-check-socket
 install -p -m 755 scripts/mysql-check-upgrade %{buildroot}%{_libexecdir}/mysql-check-upgrade
 install -p -m 644 scripts/mysql-scripts-common %{buildroot}%{_libexecdir}/mysql-scripts-common
+%if %{with init_sysv}
+install -p -m 755 scripts/mysql-wait-ready %{buildroot}%{_libexecdir}/mysql-wait-ready
+%endif
 
 # daemon helper for fixing SELinux in systemd
 %if %{with init_systemd} && 0%{?scl:1}
@@ -954,6 +951,7 @@ echo "%{_libdir}/mysql" > %{buildroot}%{_sysconfdir}/ld.so.conf.d/%{name}-%{_arc
 install -p -m 0644 %{SOURCE5} %{basename:%{SOURCE5}}
 install -p -m 0644 %{SOURCE6} %{basename:%{SOURCE6}}
 install -p -m 0644 %{SOURCE7} %{basename:%{SOURCE7}}
+install -p -m 0644 %{SOURCE8} %{basename:%{SOURCE8}}
 install -p -m 0644 %{SOURCE16} %{basename:%{SOURCE16}}
 install -p -m 0644 %{SOURCE71} %{basename:%{SOURCE71}}
 
@@ -968,13 +966,8 @@ install -p -m 0755 scripts/clustercheck %{buildroot}%{_bindir}/clustercheck
 
 # install the galera_new_cluster script anyway
 %if %{without init_systemd}
-sed -i 's/@DAEMON_NAME@/%{name}/g' scripts/galera_new_cluster.sh
-install -p -m 0755 scripts/galera_new_cluster.sh %{buildroot}%{_bindir}/galera_new_cluster
+install -p -m 0755 scripts/galera_new_cluster %{buildroot}%{_bindir}/galera_new_cluster
 %endif
-
-# install the list of skipped tests to be available for user runs
-install -p -m 0644 mysql-test/unstable-tests %{buildroot}%{_datadir}/mysql-test
-ln -s unstable-tests %{buildroot}%{_datadir}/mysql-test/rh-skipped-tests.list
 
 # remove SysV init script and a symlink to that
 rm %{buildroot}%{_sysconfdir}/init.d/mysql
@@ -994,10 +987,20 @@ cp Docs/README-wsrep Docs/README.wsrep
 # remove *.jar file from mysql-test
 rm %{buildroot}%{_datadir}/mysql-test/plugin/connect/connect/std_data/JdbcMariaDB.jar
 
+# Remove AppArmor files
+rm -r %{buildroot}%{_datadir}/%{pkg_name}/policy/apparmor
+
+# install the list of skipped tests to be available for user runs
+install -p -m 0644 mysql-test/unstable-tests %{buildroot}%{_datadir}/mysql-test
+ln -s unstable-tests %{buildroot}%{_datadir}/mysql-test/rh-skipped-tests.list
+
 %if %{without clibrary}
+%{!?scl: rm -r %{buildroot}%{_sysconfdir}/ld.so.conf.d}
 unlink %{buildroot}%{_libdir}/mysql/libmariadb.so
 rm %{buildroot}%{_libdir}/mysql/libmariadb*.so.*
 rm %{buildroot}%{_sysconfdir}/my.cnf.d/client.cnf
+unlink %{buildroot}%{_libdir}/mysql/libmysqlclient.so
+unlink %{buildroot}%{_libdir}/mysql/libmysqlclient_r.so
 %endif
 
 %if %{without embedded}
@@ -1007,24 +1010,13 @@ rm %{buildroot}%{_mandir}/man1/{mysql_client_test_embedded,mysqltest_embedded}.1
 %endif
 
 %if %{without devel}
-unlink %{buildroot}%{_bindir}/mysql_config*
+unlink %{buildroot}%{_bindir}/mysql_config
+rm %{buildroot}%{_bindir}/mariadb_config
 rm -r %{buildroot}%{_includedir}/mysql
 rm %{buildroot}%{_datadir}/aclocal/mysql.m4
 rm %{buildroot}%{_libdir}/pkgconfig/mariadb.pc
 rm %{buildroot}%{_mandir}/man1/mysql_config.1*
 unlink %{buildroot}%{_mandir}/man1/mariadb_config.1*
-%endif
-
-%if %{with devel} && %{with clibrary}
-# Create symlinks to the 'libmariadb' library, for compatibility reasons
-# libmysqlclient_r is no more.  Upstream tries to replace it with symlinks
-# but that really doesn't work (wrong soname in particular).  We'll keep
-# just the devel libmysqlclient_r.so link, so that rebuilding without any
-# source change is enough to get rid of dependency on libmysqlclient_r.
-pushd %{buildroot}%{_libdir}/mysql/
-ln -s libmariadb.so libmysqlclient.so
-ln -s libmariadb.so libmysqlclient_r.so
-popd
 %endif
 
 %if %{without client}
@@ -1042,6 +1034,23 @@ rm %{buildroot}%{_sysconfdir}/my.cnf.d/connect.cnf
 
 %if %{without oqgraph}
 rm %{buildroot}%{_sysconfdir}/my.cnf.d/oqgraph.cnf
+%endif
+
+%if %{without tokudb}
+%ifarch x86_64
+%if 0%{!?scl:1}
+rm %{buildroot}%{_bindir}/tokuftdump
+rm %{buildroot}%{_bindir}/tokuft_logprint
+%endif
+%endif
+# because upstream ships manpages for tokudb even on architectures that tokudb doesn't support
+rm %{buildroot}%{_mandir}/man1/tokuftdump.1*
+rm %{buildroot}%{_mandir}/man1/tokuft_logdump.1*
+%endif
+
+%if %{without config}
+rm %{buildroot}%{_sysconfdir}/my.cnf
+rm %{buildroot}%{_sysconfdir}/my.cnf.d/mysql-clients.cnf
 %endif
 
 %if %{without common}
@@ -1097,13 +1106,13 @@ mans= ; for bin in $mariadb_binaries; do mans+=" man1/$bin.1.gz" ; done
 
 # Creating syspath without prefix for mariadb-server package
 mariadb_server_binaries='aria_chk aria_dump_log aria_ftdump aria_pack
-aria_read_log innochecksum myisam_ftdump myisamchk myisamlog myisampack
-mysql_install_db mysql_secure_installation mysql_tzinfo_to_sql mysql_upgrade
+aria_read_log innochecksum myisam_ftdump myisamchk myisamlog
+myisampack mysql_install_db mysql_secure_installation mysql_tzinfo_to_sql mysql_upgrade
 mysqld_safe mysqld_safe_helper replace resolve_stack_dump resolveip
 wsrep_sst_common wsrep_sst_mysqldump wsrep_sst_rsync
 wsrep_sst_xtrabackup wsrep_sst_xtrabackup-v2'
 
-mariadb_server_binaries_no_man='wsrep_sst_mariabackup'
+mariadb_server_binaries_no_man='wsrep_sst_mariabackup mariabackup mbstream'
 
 %scl_syspaths_install_wrappers -n mariadb-server -m script -p bin $mariadb_server_binaries $mariadb_server_binaries_no_man
 
@@ -1153,10 +1162,6 @@ mans= ; for bin in $mariadb_server_galera_binaries; do mans+=" man1/$bin.1.gz" ;
 %if %runselftest
 %{?scl:scl enable %{scl} %{?dts} - << "EOF"}
 set -ex
-# make test is not run, because it requires running mysqld daemon
-# The same tests are run as part of unit test suite later by
-# mysql-test-run anyway
-# make test VERBOSE=1
 
 # hack to let 32- and 64-bit tests run concurrently on same build machine
 export MTR_PARALLEL=1
@@ -1207,13 +1212,11 @@ export MTR_BUILD_THREAD=%{__isa_bits}
 
 %if %{with galera}
 %post server-galera
-%if 0%{?rhel} == 6
+# Do what README at support-files/policy/selinux/README and upstream page
+# http://galeracluster.com/documentation-webpages/firewallsettings.html recommend:
+semanage port -a -t mysqld_port_t -p tcp 4568 >/dev/null 2>&1 || :
 semanage port -a -t mysqld_port_t -p tcp 4567 >/dev/null 2>&1 || :
 semanage port -a -t mysqld_port_t -p udp 4567 >/dev/null 2>&1 || :
-%else
-semanage port -a -t tram_port_t -p udp 4567 >/dev/null 2>&1 || :
-%endif
-semanage port -a -t mysqld_port_t -p tcp 4568 >/dev/null 2>&1 || :
 semodule -i %{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp >/dev/null 2>&1 || :
 %endif
 
@@ -1222,10 +1225,11 @@ semodule -i %{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp >/dev/
 semanage fcontext -a -e "%{se_daemon_source}" "%{daemondir}/%{daemon_name}%{?with_init_systemd:.service}" >/dev/null 2>&1 || :
 semanage fcontext -a -t mysqld_var_run_t "%{pidfiledir}" >/dev/null 2>&1 || :
 %if %{with init_systemd}
-# work-around for rhbz#1172683 and for rhbz#1464803
+# work-around for rhbz#1172683
 semanage fcontext -a -t mysqld_exec_t %{_root_libexecdir}/mysqld-scl-helper >/dev/null 2>&1 || :
-semanage fcontext -a -t mysqld_exec_t %{_root_libexecdir}/mysqld_safe_helper >/dev/null 2>&1 || :
 %endif
+# work-around for rhbz#1464803
+semanage fcontext -a -t mysqld_exec_t %{_root_bindir}/mysqld_safe_helper >/dev/null 2>&1 || :
 selinuxenabled && load_policy || :
 restorecon -R "%{?_scl_root}/" >/dev/null 2>&1 || :
 restorecon -R "%{_sysconfdir}" >/dev/null 2>&1 || :
@@ -1314,7 +1318,7 @@ fi
 %if %{with clibrary}
 %files libs
 %{_libdir}/mysql/libmariadb.so.*
-%{_libdir}/mysql/libmysqlclient.so.*
+%{_libdir}/mysql/libmysqlclient.so.18
 %{!?scl: %{_sysconfdir}/ld.so.conf.d/*}
 %config(noreplace) %{_sysconfdir}/my.cnf.d/client.cnf
 %endif
@@ -1331,8 +1335,9 @@ fi
 
 %if %{with common}
 %files common
-%doc COPYING COPYING.thirdparty README.md README.mysql-license README.mysql-docs
+%doc COPYING COPYING.thirdparty README.md README.mysql-license README.mysql-docs README.mariadb-devel
 %doc storage/innobase/COPYING.Percona storage/innobase/COPYING.Google
+%doc %{_datadir}/doc/%{_pkgdocdirname}
 %dir %{_libdir}/mysql
 %dir %{_libdir}/mysql/plugin
 %dir %{_datadir}/%{pkg_name}
@@ -1371,7 +1376,8 @@ fi
 
 %if %{with galera}
 %files server-galera
-%doc Docs/README.wsrep LICENSE.clustercheck
+%doc Docs/README.wsrep
+%doc LICENSE.clustercheck
 %{_bindir}/clustercheck
 %{_bindir}/galera_new_cluster
 %if %{with init_systemd}
@@ -1393,9 +1399,11 @@ fi
 %{_bindir}/aria_ftdump
 %{_bindir}/aria_pack
 %{_bindir}/aria_read_log
+%{_bindir}/mariabackup
 %if %{with init_systemd}
 %{_bindir}/mariadb-service-convert
 %endif
+%{_bindir}/mbstream
 %{_bindir}/myisamchk
 %{_bindir}/myisam_ftdump
 %{_bindir}/myisamlog
@@ -1417,21 +1425,12 @@ fi
 %{_bindir}/wsrep_sst_xtrabackup-v2
 %{?with_tokudb:%{_bindir}/tokuftdump}
 %{?with_tokudb:%{_bindir}/tokuft_logprint}
-%{_mandir}/man1/mariadb-service-convert.1.*
-%{_mandir}/man1/my_safe_process.1.*
-%{_mandir}/man1/mysqld_safe_helper.1.*
-%{_mandir}/man1/wsrep_sst_common.1.*
-%{_mandir}/man1/wsrep_sst_mysqldump.1.*
-%{_mandir}/man1/wsrep_sst_rsync.1.*
-%{_mandir}/man1/wsrep_sst_xtrabackup-v2.1.*
-%{_mandir}/man1/wsrep_sst_xtrabackup.1.*
-%{_mandir}/man1/tokuftdump.1.*
-%{_mandir}/man1/tokuft_logdump.1.*
 
 %config(noreplace) %{_sysconfdir}/my.cnf.d/%{pkg_name}-server.cnf
 %config(noreplace) %{_sysconfdir}/my.cnf.d/auth_gssapi.cnf
 %{?with_tokudb:%config(noreplace) %{_sysconfdir}/my.cnf.d/tokudb.cnf}
 
+# RocksDB engine
 %if %{with rocksdb}
 %config(noreplace) %{_sysconfdir}/my.cnf.d/rocksdb.cnf
 %{_bindir}/mysql_ldb
@@ -1460,6 +1459,7 @@ fi
 %{_mandir}/man1/aria_ftdump.1*
 %{_mandir}/man1/aria_pack.1*
 %{_mandir}/man1/aria_read_log.1*
+%{_mandir}/man1/mariadb-service-convert.1*
 %{_mandir}/man1/myisamchk.1*
 %{_mandir}/man1/myisamlog.1*
 %{_mandir}/man1/myisampack.1*
@@ -1467,13 +1467,22 @@ fi
 %{_mandir}/man1/mysql.server.1*
 %{_mandir}/man1/mysql_install_db.1*
 %{_mandir}/man1/mysql_secure_installation.1*
+%{_mandir}/man1/mysql_tzinfo_to_sql.1*
 %{_mandir}/man1/mysqld_safe.1*
+%{_mandir}/man1/mysqld_safe_helper.1*
+%{_mandir}/man1/my_safe_process.1*
 %{_mandir}/man1/innochecksum.1*
 %{_mandir}/man1/replace.1*
-%{_mandir}/man1/resolve_stack_dump.1*
 %{_mandir}/man1/resolveip.1*
-%{_mandir}/man1/mysql_tzinfo_to_sql.1*
+%{_mandir}/man1/resolve_stack_dump.1*
 %{_mandir}/man8/mysqld.8*
+%{?with_tokudb:%{_mandir}/man1/tokuftdump.1*}
+%{?with_tokudb:%{_mandir}/man1/tokuft_logdump.1*}
+%{_mandir}/man1/wsrep_sst_common.1*
+%{_mandir}/man1/wsrep_sst_mysqldump.1*
+%{_mandir}/man1/wsrep_sst_rsync.1*
+%{_mandir}/man1/wsrep_sst_xtrabackup.1*
+%{_mandir}/man1/wsrep_sst_xtrabackup-v2.1*
 
 %{_datadir}/%{pkg_name}/fill_help_tables.sql
 %{_datadir}/%{pkg_name}/install_spider.sql
@@ -1489,24 +1498,22 @@ fi
 %{_datadir}/%{pkg_name}/wsrep.cnf
 %{_datadir}/%{pkg_name}/wsrep_notify
 %dir %{_datadir}/%{pkg_name}/policy
-%dir %{_datadir}/%{pkg_name}/policy/apparmor
 %dir %{_datadir}/%{pkg_name}/policy/selinux
-%{_datadir}/%{pkg_name}/policy/apparmor/README
-%{_datadir}/%{pkg_name}/policy/apparmor/usr.sbin.mysqld*
 %{_datadir}/%{pkg_name}/policy/selinux/README
-%{_datadir}/%{pkg_name}/policy/selinux/mariadb.*
 %{_datadir}/%{pkg_name}/policy/selinux/mariadb-server.*
+%{_datadir}/%{pkg_name}/policy/selinux/mariadb.*
 %if %{with init_systemd}
 %{_datadir}/%{pkg_name}/systemd/mariadb.service
 %endif
 
 %{daemondir}/%{daemon_name}*
 %{_libexecdir}/mysql-prepare-db-dir
-%{_libexecdir}/mysql-wait-ready
-%{_libexecdir}/mysql-wait-stop
 %{_libexecdir}/mysql-check-socket
 %{_libexecdir}/mysql-check-upgrade
 %{_libexecdir}/mysql-scripts-common
+%if %{with init_sysv}
+%{_libexecdir}/mysql-wait-ready
+%endif
 
 %{?with_init_systemd:%{_tmpfilesdir}/%{name}.conf}
 %attr(0755,mysql,mysql) %dir %{pidfiledir}
@@ -1556,8 +1563,8 @@ fi
 
 %if %{with devel}
 %files devel
-%{_bindir}/mysql_config
-%{_bindir}/mariadb_config
+%{_bindir}/mysql_config*
+%{_bindir}/mariadb_config*
 %{_includedir}/mysql
 %{_datadir}/aclocal/mysql.m4
 %{_libdir}/pkgconfig/mariadb.pc
@@ -1566,8 +1573,8 @@ fi
 %{_libdir}/mysql/libmysqlclient.so
 %{_libdir}/mysql/libmysqlclient_r.so
 %endif
-%{_mandir}/man1/mysql_config.1*
-%{_mandir}/man1/mariadb_config.1*
+%{_mandir}/man1/mysql_config*
+%{_mandir}/man1/mariadb_config*
 %endif
 
 %if %{with embedded}
@@ -1604,6 +1611,34 @@ fi
 %endif
 
 %changelog
+* Wed Aug 09 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-6
+- Re-enable tests
+
+* Wed Aug 09 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-5
+- Allow 4567 port for tcp as well
+
+* Wed Aug 09 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-4
+- Install mysql-wait-ready on RHEL-6 for the SysV init
+- Do not use mysql-wait-stop on RHEL-7 service files
+
+* Tue Aug 08 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-3
+- Enable tests
+
+* Tue Aug 08 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-2
+- Re-add README and LICENSE files, fix dangling symlinks
+
+* Tue Aug 01 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-1
+- Rebase to 10.2.7
+- Use "/run" location instead of "/var/run" symlink
+  Related: #1455811
+- Remove mysql-wait-* scripts. They aren't needed when using systemd "Type=notify"
+- Enable building of mysqlbackup and include small fixes from Fedora
+- Marge more mostly format related changes from Fedora to keep the spec better
+
+* Mon Jun 26 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.6-9
+- Fix the SELinux context of mysqld_safe_helper on rhel-6 as well
+  Related: #1464803
+
 * Mon Jun 26 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.6-7
 - Define SELinux context for mysqld_safe_helper
   Use scl enable for running prepare script after changing the user

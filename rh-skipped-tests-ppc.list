@@ -1,2 +1,0 @@
-rocksdb.use_direct_reads_writes              : rhbz#1462836
-
