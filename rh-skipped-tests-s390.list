@@ -1,0 +1,2 @@
+gcol_column_def_options_innodb          : bz#1462836
+gcol_column_def_options_myisam          : bz#1462836

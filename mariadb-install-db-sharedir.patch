@@ -1,0 +1,40 @@
+Use configured value instead of hardcoded path
+
+diff -up mariadb-10.1.19/scripts/mysql_install_db.pl.in.pbasedir mariadb-10.1.19/scripts/mysql_install_db.pl.in
+--- mariadb-10.1.19/scripts/mysql_install_db.pl.in.pbasedir	2016-11-19 13:08:53.882777759 +0100
++++ mariadb-10.1.19/scripts/mysql_install_db.pl.in	2016-11-19 13:08:53.880777758 +0100
+@@ -320,7 +320,7 @@ elsif ( $opt->{basedir} )
+                     find_in_basedir($opt,"file","mysqld-nt",
+                                   "bin");  # ,"sql"
+   $srcpkgdatadir  = find_in_basedir($opt,"dir","fill_help_tables.sql",
+-                                    "share","share/mysql");  # ,"scripts"
++                                    "share","@INSTALL_MYSQLSHAREDIR@");  # ,"scripts"
+   $buildpkgdir    = $srcpkgdatadir;
+   $scriptdir      = "$opt->{basedir}/scripts";
+ }
+diff -up mariadb-10.1.19/mysql-test/mysql-test-run.pl.pbasedir mariadb-10.1.19/mysql-test/mysql-test-run.pl
+diff -up mariadb-10.1.19/scripts/mysql_install_db.sh.pbasedir mariadb-10.1.19/scripts/mysql_install_db.sh
+--- mariadb-10.1.19/scripts/mysql_install_db.sh.pbasedir	2016-12-20 14:53:05.118823806 +0100
++++ mariadb-10.1.19/scripts/mysql_install_db.sh	2016-12-20 16:35:10.888834851 +0100
+@@ -283,17 +283,17 @@ then
+     cannot_find_file mysqld $basedir/libexec $basedir/sbin $basedir/bin
+     exit 1
+   fi
+-  langdir=`find_in_basedir --dir errmsg.sys share/english share/mysql/english`
++  langdir=`find_in_basedir --dir errmsg.sys share/english @INSTALL_MYSQLSHAREDIR@/english`
+   if test -z "$langdir"
+   then
+-    cannot_find_file errmsg.sys $basedir/share/english $basedir/share/mysql/english
++    cannot_find_file errmsg.sys $basedir/share/english $basedir/@INSTALL_MYSQLSHAREDIR@/english
+     exit 1
+   fi
+-  srcpkgdatadir=`find_in_basedir --dir fill_help_tables.sql share share/mysql`
++  srcpkgdatadir=`find_in_basedir --dir fill_help_tables.sql share @INSTALL_MYSQLSHAREDIR@`
+   buildpkgdatadir=$srcpkgdatadir
+   if test -z "$srcpkgdatadir"
+   then
+-    cannot_find_file fill_help_tables.sql $basedir/share $basedir/share/mysql
++    cannot_find_file fill_help_tables.sql $basedir/share $basedir/@INSTALL_MYSQLSHAREDIR@
+     exit 1
+   fi
+   scriptdir="$basedir/scripts"

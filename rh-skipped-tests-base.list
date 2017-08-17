@@ -1,0 +1,30 @@
+# failed tests tracked in bz#1462836
+
+spider/bg.spider3_fixes                      :
+spider/bg.spider3_fixes_part                 :
+spider/bg.spider_fixes                       :
+spider/bg.spider_fixes_part                  :
+spider/bg.basic_sql                          :
+spider/bg.basic_sql_part                     :
+spider/bg.direct_aggregate                   :
+spider/bg.direct_aggregate_part              :
+spider/bg.direct_update                      :
+spider/bg.direct_update_part                 :
+spider/bg.function                           :
+spider/bg.ha                                 :
+spider/bg.ha_part                            :
+spider/bg.vp_fixes                           :
+spider.spider3_fixes                         :
+spider.spider3_fixes_part                    :
+spider.spider_fixes                          :
+spider.spider_fixes_part                     :
+spider.basic_sql_part                        :
+spider.direct_aggregate                      :
+spider.direct_aggregate_part                 :
+spider.direct_update                         :
+spider.direct_update_part                    :
+spider.function                              :
+spider.ha                                    :
+spider.ha_part                               :
+spider.vp_fixes                              :
+
