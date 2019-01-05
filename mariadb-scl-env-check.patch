@@ -1,6 +1,6 @@
-diff -up mariadb-10.2.6/scripts/mysqld_safe.sh.p90 mariadb-10.2.6/scripts/mysqld_safe.sh
---- mariadb-10.2.6/scripts/mysqld_safe.sh.p90	2017-05-15 01:13:18.000000000 +0200
-+++ mariadb-10.2.6/scripts/mysqld_safe.sh	2017-06-26 21:37:24.260934157 +0200
+diff -up mariadb-10.2.8/scripts/mysqld_safe.sh.p90 mariadb-10.2.8/scripts/mysqld_safe.sh
+--- mariadb-10.2.8/scripts/mysqld_safe.sh.p90	2017-08-17 12:05:39.000000000 +0200
++++ mariadb-10.2.8/scripts/mysqld_safe.sh	2017-09-21 21:47:46.128058738 +0200
 @@ -11,6 +11,12 @@
  # mysql.server works by first doing a cd to the base directory and from there
  # executing mysqld_safe
@@ -14,9 +14,9 @@ diff -up mariadb-10.2.6/scripts/mysqld_safe.sh.p90 mariadb-10.2.6/scripts/mysqld
  # Initialize script globals
  KILL_MYSQLD=1;
  MYSQLD=
-diff -up mariadb-10.2.6/scripts/mysql.init.in.p90 mariadb-10.2.6/scripts/mysql.init.in
---- mariadb-10.2.6/scripts/mysql.init.in.p90	2017-06-26 21:37:24.257934157 +0200
-+++ mariadb-10.2.6/scripts/mysql.init.in	2017-06-26 21:40:53.820793622 +0200
+diff -up mariadb-10.2.8/scripts/mysql.init.in.p90 mariadb-10.2.8/scripts/mysql.init.in
+--- mariadb-10.2.8/scripts/mysql.init.in.p90	2017-09-21 21:47:46.125058730 +0200
++++ mariadb-10.2.8/scripts/mysql.init.in	2017-09-21 21:50:28.505677217 +0200
 @@ -72,7 +72,7 @@ start(){
  	ret=0
      else
@@ -26,6 +26,22 @@ diff -up mariadb-10.2.6/scripts/mysql.init.in.p90 mariadb-10.2.6/scripts/mysql.i
  
  	# Pass all the options determined above, to ensure consistent behavior.
  	# In many cases mysqld_safe would arrive at the same conclusions anyway
+@@ -81,13 +81,13 @@ start(){
+ 	# and some users might prefer to configure logging to syslog.)
+ 	# Note: set --basedir to prevent probes that might trigger SELinux
+ 	# alarms, per bug #547485
+-	su - $MYUSER -s /bin/bash -c "$exec   --datadir='$datadir' --socket='$socketfile' \
++	su - $MYUSER -s /bin/bash -c "scl enable @SCL_NAME@ -- $exec   --datadir='$datadir' --socket='$socketfile' \
+ 		--pid-file='$pidfile' $MYSQLD_OPTS $_WSREP_NEW_CLUSTER \
+ 		--basedir=@prefix@ --user=$MYUSER" >/dev/null 2>&1 &
+ 	safe_pid=$!
+ 
+ 	# Wait until the daemon is up
+-	su - $MYUSER -s /bin/bash -c "@libexecdir@/mysql-wait-ready '$safe_pid'"
++	su - $MYUSER -s /bin/bash -c "scl enable @SCL_NAME@ -- @libexecdir@/mysql-wait-ready '$safe_pid'"
+ 	ret=$?
+ 
+ 	if [ $ret -eq 0 ]; then
 @@ -154,6 +154,18 @@ condrestart(){
      [ -e $lockfile ] && restart || :
  }
@@ -45,9 +61,9 @@ diff -up mariadb-10.2.6/scripts/mysql.init.in.p90 mariadb-10.2.6/scripts/mysql.i
  
  # See how we were called.
  case "$1" in
-diff -up mariadb-10.2.6/scripts/mysql_install_db.sh.p90 mariadb-10.2.6/scripts/mysql_install_db.sh
---- mariadb-10.2.6/scripts/mysql_install_db.sh.p90	2017-06-26 21:37:22.035934224 +0200
-+++ mariadb-10.2.6/scripts/mysql_install_db.sh	2017-06-26 21:37:24.260934157 +0200
+diff -up mariadb-10.2.8/scripts/mysql_install_db.sh.p90 mariadb-10.2.8/scripts/mysql_install_db.sh
+--- mariadb-10.2.8/scripts/mysql_install_db.sh.p90	2017-09-21 21:47:46.095058650 +0200
++++ mariadb-10.2.8/scripts/mysql_install_db.sh	2017-09-21 21:47:46.129058741 +0200
 @@ -19,6 +19,12 @@
  #
  # All unrecognized arguments to this script are passed to mysqld.
@@ -114,15 +130,14 @@ diff -up mariadb-10.2.6/scripts/mysql_install_db.sh.p90 mariadb-10.2.6/scripts/m
    fi
  
    echo
-diff -up mariadb-10.2.6/scripts/mysql.service.in.p90 mariadb-10.2.6/scripts/mysql.service.in
---- mariadb-10.2.6/scripts/mysql.service.in.p90	2017-06-26 21:37:24.248934157 +0200
-+++ mariadb-10.2.6/scripts/mysql.service.in	2017-06-26 21:37:24.261934157 +0200
-@@ -34,13 +34,19 @@ Type=notify
+diff -up mariadb-10.2.8/scripts/mysql.service.in.p90 mariadb-10.2.8/scripts/mysql.service.in
+--- mariadb-10.2.8/scripts/mysql.service.in.p90	2017-09-21 21:47:46.123058725 +0200
++++ mariadb-10.2.8/scripts/mysql.service.in	2017-09-21 21:47:46.129058741 +0200
+@@ -33,14 +33,20 @@ Type=notify
  User=mysql
  Group=mysql
  
 -ExecStartPre=@libexecdir@/mysql-check-socket
--ExecStartPre=@libexecdir@/mysql-prepare-db-dir %n
 +# Load collections set to enabled for this service
 +EnvironmentFile=@SCL_SCRIPTS@/service-environment
 +
@@ -130,6 +145,8 @@ diff -up mariadb-10.2.6/scripts/mysql.service.in.p90 mariadb-10.2.6/scripts/mysq
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- /usr/bin/scl_enabled @SCL_NAME@
 +
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket
+ # '%n' expands to 'Full unit name'; man systemd.unit
+-ExecStartPre=@libexecdir@/mysql-prepare-db-dir %n
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir %n
  # MYSQLD_OPTS here is for users to set in /etc/systemd/system/@DAEMON_NAME@@.service.d/MY_SPECIAL.conf
  # Note: we set --basedir to prevent probes that might trigger SELinux alarms,
@@ -141,36 +158,36 @@ diff -up mariadb-10.2.6/scripts/mysql.service.in.p90 mariadb-10.2.6/scripts/mysq
  
  # Setting this to true can break replication and the Type=notify settings
  # See also bind-address mysqld option.
-diff -up mariadb-10.2.6/scripts/mysql@.service.in.p90 mariadb-10.2.6/scripts/mysql@.service.in
---- mariadb-10.2.6/scripts/mysql@.service.in.p90	2017-06-26 21:37:24.254934157 +0200
-+++ mariadb-10.2.6/scripts/mysql@.service.in	2017-06-26 21:37:24.261934157 +0200
-@@ -41,13 +41,19 @@ Type=notify
+diff -up mariadb-10.2.8/scripts/mysql@.service.in.p90 mariadb-10.2.8/scripts/mysql@.service.in
+--- mariadb-10.2.8/scripts/mysql@.service.in.p90	2017-09-21 21:47:46.125058730 +0200
++++ mariadb-10.2.8/scripts/mysql@.service.in	2017-09-21 21:47:46.129058741 +0200
+@@ -40,13 +40,19 @@ Type=notify
  User=mysql
  Group=mysql
  
--ExecStartPre=@libexecdir@/mysql-check-socket
--ExecStartPre=@libexecdir@/mysql-prepare-db-dir %n
+-ExecStartPre=@libexecdir@/mysql-check-socket --defaults-group-suffix=.%I
+-ExecStartPre=@libexecdir@/mysql-prepare-db-dir --defaults-group-suffix=.%I %n
 +# Load collections set to enabled for this service
 +EnvironmentFile=@SCL_SCRIPTS@/service-environment
 +
 +# We want to start server only inside "scl enable" invocation
 +ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- /usr/bin/scl_enabled @SCL_NAME@
 +
-+ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket
-+ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir %n
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-socket --defaults-group-suffix=.%I
++ExecStartPre=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-prepare-db-dir --defaults-group-suffix=.%I %n
  # MYSQLD_OPTS here is for users to set in /etc/systemd/system/@DAEMON_NAME@@.service.d/MY_SPECIAL.conf
  # Note: we set --basedir to prevent probes that might trigger SELinux alarms,
  # per bug #547485
 -ExecStart=@libexecdir@/mysqld --defaults-group-suffix=.%I --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
--ExecStartPost=@libexecdir@/mysql-check-upgrade
-+ExecStart=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysqld --defaults-group-suffix=.%I --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
-+ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade
+-ExecStartPost=@libexecdir@/mysql-check-upgrade --defaults-group-suffix=.%I
++ExecStart=@libexecdir@/mysqld-scl-helper enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysqld --defaults-group-suffix=.%I --basedir=@prefix@ $MYSQLD_OPTS $_WSREP_NEW_CLUSTER
++ExecStartPost=/usr/bin/scl enable $@SCL_NAME_UPPER@_SCLS_ENABLED -- @libexecdir@/mysql-check-upgrade --defaults-group-suffix=.%I
  
  # Setting this to true can break replication and the Type=notify settings
  # See also bind-address mysqld option.
-diff -up mariadb-10.2.6/support-files/mysql-log-rotate.sh.p90 mariadb-10.2.6/support-files/mysql-log-rotate.sh
---- mariadb-10.2.6/support-files/mysql-log-rotate.sh.p90	2017-06-26 21:37:22.025934224 +0200
-+++ mariadb-10.2.6/support-files/mysql-log-rotate.sh	2017-06-26 21:37:24.261934157 +0200
+diff -up mariadb-10.2.8/support-files/mysql-log-rotate.sh.p90 mariadb-10.2.8/support-files/mysql-log-rotate.sh
+--- mariadb-10.2.8/support-files/mysql-log-rotate.sh.p90	2017-09-21 21:47:46.084058621 +0200
++++ mariadb-10.2.8/support-files/mysql-log-rotate.sh	2017-09-21 21:47:46.129058741 +0200
 @@ -29,9 +29,9 @@
  #    postrotate
  #	# just if mysqld is really running

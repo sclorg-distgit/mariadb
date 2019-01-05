@@ -1,10 +1,14 @@
-diff -up mariadb-10.2.7/scripts/CMakeLists.txt.p7 mariadb-10.2.7/scripts/CMakeLists.txt
---- mariadb-10.2.7/scripts/CMakeLists.txt.p7	2017-08-01 22:39:39.568209484 +0200
-+++ mariadb-10.2.7/scripts/CMakeLists.txt	2017-08-01 22:41:32.810599345 +0200
-@@ -309,6 +309,34 @@ ELSE()
-       COMPONENT ${${file}_COMPONENT}
+We have some downstream patches and other scripts that include variables to
+be expanded by cmake. Cmake needs to know about them, so adding them manually.
+
+
+diff -up mariadb-10.2.8/scripts/CMakeLists.txt.p7 mariadb-10.2.8/scripts/CMakeLists.txt
+--- mariadb-10.2.8/scripts/CMakeLists.txt.p7	2017-08-28 22:35:58.589879693 +0200
++++ mariadb-10.2.8/scripts/CMakeLists.txt	2017-08-28 22:34:10.463434154 +0200
+@@ -338,6 +338,35 @@ ELSE()
       )
    ENDFOREACH()
+ 
 +  # files for systemd
 +  SET(SYSTEMD_SCRIPTS
 +    mysql.tmpfiles.d
@@ -33,6 +37,7 @@ diff -up mariadb-10.2.7/scripts/CMakeLists.txt.p7 mariadb-10.2.7/scripts/CMakeLi
 +        "${CMAKE_CURRENT_SOURCE_DIR}" )
 +    ENDIF()
 +  ENDFOREACH()
++
  ENDIF()
  
  # Install libgcc as  mylibgcc.a

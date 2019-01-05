@@ -5,6 +5,29 @@
 
 source "`dirname ${BASH_SOURCE[0]}`/mysql-scripts-common"
 
+export LC_ALL=C
+
+# Returns content of the specified directory
+# If listing files fails, fake-file is returned so which means
+# we'll behave like there was some data initialized
+# Some files or directories are fine to be there, so those are
+# explicitly removed from the listing
+# @param <dir> datadir
+list_datadir ()
+{
+    ( ls -1A "$1" 2>/dev/null || echo "fake-file" ) | grep -v \
+    -e '^lost+found$' \
+    -e '\.err$' \
+    -e '^.bash_history$'
+}
+
+# Checks whether datadir should be initialized
+# @param <dir> datadir
+should_initialize ()
+{
+    test -z "$(list_datadir "$1")"
+}
+
 # If two args given first is user, second is group
 # otherwise the arg is the systemd service file
 if [ "$#" -eq 2 ]
@@ -54,42 +77,45 @@ else
     fi
 fi
 
-
-
-export LC_ALL=C
-
-# Returns content of the specified directory
-# If listing files fails, fake-file is returned so which means
-# we'll behave like there was some data initialized
-# Some files or directories are fine to be there, so those are
-# explicitly removed from the listing
-# @param <dir> datadir
-list_datadir ()
-{
-    ( ls -1A "$1" 2>/dev/null || echo "fake-file" ) | grep -v \
-    -e '^lost+found$' \
-    -e '\.err$' \
-    -e '^\.bash_history$'
-}
-
-# Checks whether datadir should be initialized
-# @param <dir> datadir
-should_initialize ()
-{
-    test -z "$(list_datadir "$1")"
-}
-
 # Make the data directory if doesn't exist or empty
 if should_initialize "$datadir" ; then
+    # First, make sure $datadir is there with correct permissions
+    # (note: if it's not, and we're not root, this'll fail ...)
+    if [ ! -e "$datadir" -a ! -h "$datadir" ]
+    then
+        mkdir -p "$datadir" || exit 1
+    fi
+    chown "$myuser:$mygroup" "$datadir"
+    chmod 0755 "$datadir"
+    [ -x /sbin/restorecon ] && /sbin/restorecon "$datadir"
 
     # Now create the database
     echo "Initializing @NICE_PROJECT_NAME@ database"
+    # Avoiding deletion of files not created by mysql_install_db is
+    # guarded by time check and sleep should help work-arounded
+    # potential issues on systems with 1 second resolution timestamps
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1335849#c19
+    INITDB_TIMESTAMP=`LANG=C date -u`
+    sleep 1
     @bindir@/mysql_install_db --rpm --datadir="$datadir" --user="$myuser"
     ret=$?
     if [ $ret -ne 0 ] ; then
         echo "Initialization of @NICE_PROJECT_NAME@ database failed." >&2
-        echo "Perhaps @sysconfdir@/my.cnf is misconfigured." >&2
-        echo "Note, that you may need to clean up any partially-created database files in $datadir" >&2
+        echo "Perhaps @sysconfdir@/my.cnf is misconfigured or there is some problem with permissions of $datadir." >&2
+        # Clean up any partially-created database files
+        if [ ! -e "$datadir/mysql/user.frm" ] && [ -d "$datadir" ] ; then
+            echo "Initialization of @NICE_PROJECT_NAME@ database was not finished successfully." >&2
+            echo "Files created so far will be removed." >&2
+            find "$datadir" -mindepth 1 -maxdepth 1 -newermt "$INITDB_TIMESTAMP" \
+                 -not -name "lost+found" -exec rm -rf {} +
+            if [ $? -ne 0 ] ; then
+                echo "Removing of created files was not successfull." >&2
+                echo "Please, clean directory $datadir manually." >&2
+            fi
+        else
+            echo "However, part of data has been initialized and those will not be removed." >&2
+            echo "Please, clean directory $datadir manually." >&2
+        fi
         exit $ret
     fi
     # upgrade does not need to be run on a fresh datadir

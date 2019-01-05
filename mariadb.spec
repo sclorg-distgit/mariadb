@@ -8,7 +8,7 @@
 # Regression tests may take a long time (many cores recommended), skip them by
 # passing --nocheck to rpmbuild or by setting runselftest to 0 if defining
 # --nocheck is not possible (e.g. in koji build)
-%{!?runselftest:%global runselftest 1}
+%{!?runselftest:%global runselftest 0}
 
 # Set this to 1 to see which tests fail, but 0 on production ready build
 %global ignore_testsuite_result 0
@@ -62,6 +62,8 @@
 %bcond_without bench
 %bcond_without test
 %bcond_without galera
+%bcond_without mariabackup
+%bcond_without gssapi
 
 # rocksdb currently disabled for SCL
 %ifarch x86_64 ppc64le aarch64 armv7hl
@@ -78,10 +80,12 @@
 %bcond_with embedded
 %bcond_with clibrary
 %bcond_with connect
+%bcond_with cracklib_password_check
 %else
 %bcond_without clibrary
 %bcond_without embedded
 %bcond_without connect
+%bcond_without cracklib_password_check
 %endif
 
 # When there is already another package that ships /etc/my.cnf,
@@ -98,9 +102,6 @@
 %bcond_with init_sysv
 %global daemon_name %{?scl_prefix}%{pkg_name}
 %global daemon_no_prefix %{pkg_name}
-%if ! 0%{?scl:1}
-%global mysqld_pid_dir mysqld
-%endif
 %else
 %bcond_with init_systemd
 %bcond_without init_sysv
@@ -110,7 +111,7 @@
 
 # MariaDB 10.0 and later requires pcre >= 8.35, otherwise we need to use
 # the bundled library, since the package cannot be build with older version
-%global pcre_version 8.40
+%global pcre_version 8.41
 %if 0%{?fedora} >= 21
 %bcond_without pcre
 %else
@@ -169,7 +170,7 @@
 # Make long macros shorter
 %global sameevr   %{epoch}:%{version}-%{release}
 %global compatver 10.2
-%global bugfixver 7
+%global bugfixver 8
 
 %if 0%{?scl:1}
 %global scl_upper %{lua:print(string.upper(string.gsub(rpm.expand("%{scl}"), "-", "_")))}
@@ -177,7 +178,7 @@
 
 Name:             %{?scl_prefix}mariadb
 Version:          %{compatver}.%{bugfixver}
-Release:          6%{?with_debug:.debug}%{?dist}
+Release:          5%{?with_debug:.debug}.bs1%{?dist}
 Epoch:            1
 
 Summary:          A community developed branch of MySQL
@@ -226,11 +227,8 @@ Patch12:          %{pkgnamepatch}-admincrash.patch
 
 # Patches specific for this mysql package
 Patch30:          %{pkgnamepatch}-errno.patch
-Patch34:          %{pkgnamepatch}-covscan-stroverflow.patch
 Patch37:          %{pkgnamepatch}-notestdb.patch
 Patch38:          %{pkgnamepatch}-servicename.patch
-# Patch only for 10.1.27, resolving FTBFS
-Patch39:          %{pkgnamepatch}-10.2.7.patch
 
 # Patches for galera
 Patch40:          %{pkgnamepatch}-galera.cnf.patch
@@ -242,7 +240,6 @@ Patch90:          %{pkgnamepatch}-scl-env-check.patch
 
 BuildRequires:    cmake
 BuildRequires:    libaio-devel
-BuildRequires:    libarchive-devel
 BuildRequires:    libedit-devel
 BuildRequires:    ncurses-devel
 BuildRequires:    perl
@@ -281,10 +278,28 @@ BuildRequires:    openssl-devel
 BuildRequires:    %{dts}-gcc-c++
 %endif
 
+# Mariabackup
+%if %{with mariabackup}
+BuildRequires:    libarchive-devel
+%endif
+
+# Cracklib plugin
+%if %{with cracklib_password_check}
+BuildRequires:    cracklib-dicts cracklib-devel
+%endif
+
+# gssapi plugins
+%if %{with gssapi}
+BuildRequires:    krb5-devel
+%endif
+
 %if %{with galera}
 BuildRequires:    selinux-policy-devel
 %endif
-%{?with_init_systemd:BuildRequires: systemd systemd-devel}
+
+%if %{with init_systemd}
+BuildRequires: systemd systemd-devel
+%endif
 
 Requires:         bash
 Requires:         fileutils
@@ -393,6 +408,7 @@ Summary:          The configuration files and scripts for galera replication
 Group:            Applications/Databases
 Requires:         %{name}-common%{?_isa} = %{sameevr}
 Requires:         %{name}-server%{?_isa} = %{sameevr}
+Requires:         %{name}-backup%{?_isa} = %{sameevr}
 Requires:         %{?scl_prefix}galera >= 25.3.3
 Requires(post):   libselinux-utils
 Requires(post):   policycoreutils-python
@@ -504,6 +520,60 @@ or products (such as Excel), or data retrieved from the environment
 %endif
 
 
+%if %{with mariabackup}
+%package          backup
+Summary:          The mariabackup tool for physical online backups
+Group:            Applications/Databases
+Requires:         %{name}-server%{?_isa} = %{sameevr}
+%{?scl:Requires:%scl_runtime}
+
+%description      backup
+MariaDB Backup is an open source tool provided by MariaDB for performing
+physical online backups of InnoDB, Aria and MyISAM tables.
+For InnoDB, "hot online" backups are possible.
+%endif
+
+
+%if %{with cracklib_password_check}
+%package          cracklib-password-check
+Summary:          The password strength checking plugin
+Group:            Applications/Databases
+Requires:         %{name}-server%{?_isa} = %{sameevr}
+%{?scl:Requires:%scl_runtime}
+
+%description      cracklib-password-check
+CrackLib is a password strength checking library. It is installed by default
+in many Linux distributions and is invoked automatically (by pam_cracklib.so)
+whenever the user login password is modified.
+Now, with the cracklib_password_check password validation plugin, one can
+also use it to check MariaDB account passwords.
+%endif
+
+
+%if %{with gssapi}
+%package          gssapi-client
+Summary:          GSSAPI authentication plugin for client
+Group:            Applications/Databases
+Requires:         %{name}%{?_isa} = %{sameevr}
+%{?scl:Requires:%scl_runtime}
+
+%description      gssapi-client
+GSSAPI authentication client-side plugin for MariaDB for passwordless login.
+This plugin includes support for Kerberos on Unix.
+
+
+%package          gssapi-server
+Summary:          GSSAPI authentication plugin for server
+Group:            Applications/Databases
+Requires:         %{name}-server%{?_isa} = %{sameevr}
+%{?scl:Requires:%scl_runtime}
+
+%description      gssapi-server
+GSSAPI authentication server-side plugin for MariaDB for passwordless login.
+This plugin includes support for Kerberos on Unix.
+%endif
+
+
 %package          server-utils
 Summary:          Non-essential server utilities for MariaDB/MySQL applications
 Group:            Applications/Databases
@@ -513,6 +583,7 @@ Provides:         mysql-perl = %{sameevr}
 %endif
 # mysqlhotcopy needs DBI/DBD support
 Requires:         perl(DBI) perl(DBD::mysql)
+%{?scl:Requires:%scl_runtime}
 
 %description      server-utils
 This package contains all non-essential server utilities and scripts for managing
@@ -647,6 +718,7 @@ MariaDB is a community developed branch of MySQL.
 %if 0%{?scl:1}
 %scl_syspaths_package -d
 %scl_syspaths_package config -d
+%scl_syspaths_package backup -d
 %scl_syspaths_package server -d
 %scl_syspaths_package server-utils -d
 %scl_syspaths_package server-galera -d
@@ -654,6 +726,9 @@ MariaDB is a community developed branch of MySQL.
 
 %prep
 %setup -q -n mariadb-%{version}
+
+# Removt JAR files that upstream puts into tarball
+find . -name "*.jar" -type f -exec rm --verbose -f {} \;
 
 %patch1 -p1
 %patch2 -p1
@@ -665,10 +740,8 @@ MariaDB is a community developed branch of MySQL.
 %patch10 -p1
 %patch12 -p1
 %patch30 -p1
-%patch34 -p1
 %patch37 -p1
 %patch38 -p1
-%patch39 -p1
 %patch40 -p1
 %if %{without init_systemd}
 %patch42 -p1
@@ -809,6 +882,8 @@ export LDFLAGS
 %{!?with_tokudb: -DWITHOUT_TOKUDB=ON}\
 %{!?with_mroonga: -DWITHOUT_MROONGA=ON}\
 %{!?with_oqgraph: -DWITHOUT_OQGRAPH=ON}\
+         -DCONNECT_WITH_MONGO=OFF \
+         -DCONNECT_WITH_JDBC=OFF \
          -DTMPDIR=/var/tmp \
 %{?with_debug: -DCMAKE_BUILD_TYPE=Debug}\
 %{?_hardened_build: -DWITH_MYSQLD_LDFLAGS="-pie -Wl,-z,relro,-z,now"}
@@ -837,11 +912,6 @@ set -ex
 make DESTDIR=%{buildroot} install
 %{?scl:EOF}
 
-# multilib header support
-for header in mysql/my_config.h mysql/private/config.h; do
-%multilib_fix_c_header --file %{_includedir}/$header
-done
-
 # multilib support for shell scripts
 # we only apply this to known Red Hat multilib arches, per bug #181335
 if %multilib_capable; then
@@ -867,9 +937,6 @@ mkdir -p %{buildroot}%{logfiledir}
 chmod 0750 %{buildroot}%{logfiledir}
 touch %{buildroot}%{logfile}
 
-# current setting in my.cnf is to use /var/run/mariadb for creating pid file,
-# however since my.cnf is not updated by RPM if changed, we need to create mysqld
-# as well because users can have odd settings in their /etc/my.cnf
 mkdir -p %{buildroot}%{pidfiledir}
 install -p -m 0755 -d %{buildroot}%{dbdatadir}
 
@@ -891,9 +958,6 @@ mv %{buildroot}%{_sysconfdir}/my.cnf.d/server.cnf %{buildroot}%{_sysconfdir}/my.
 install -D -p -m 644 scripts/mysql.service %{buildroot}%{_unitdir}/%{daemon_name}.service
 install -D -p -m 644 scripts/mysql@.service %{buildroot}%{_unitdir}/%{daemon_name}@.service
 install -D -p -m 0644 scripts/mysql.tmpfiles.d %{buildroot}%{_tmpfilesdir}/%{name}.conf
-%if 0%{?mysqld_pid_dir:1}
-echo "d %{_rundir}/%{mysqld_pid_dir} 0755 mysql mysql -" >>%{buildroot}%{_tmpfilesdir}/%{name}.conf
-%endif
 %endif
 
 # install SysV init script
@@ -984,11 +1048,13 @@ rm %{buildroot}%{_sysconfdir}/logrotate.d/mysql
 # rename the wsrep README so it corresponds with the other README names
 cp Docs/README-wsrep Docs/README.wsrep
 
-# remove *.jar file from mysql-test
-rm %{buildroot}%{_datadir}/mysql-test/plugin/connect/connect/std_data/JdbcMariaDB.jar
-
 # Remove AppArmor files
 rm -r %{buildroot}%{_datadir}/%{pkg_name}/policy/apparmor
+
+# Remove service file from upstream
+%if %{with init_systemd}
+rm -r %{buildroot}%{_datadir}/%{pkg_name}/systemd
+%endif
 
 # install the list of skipped tests to be available for user runs
 install -p -m 0644 mysql-test/unstable-tests %{buildroot}%{_datadir}/mysql-test
@@ -1034,6 +1100,11 @@ rm %{buildroot}%{_sysconfdir}/my.cnf.d/connect.cnf
 
 %if %{without oqgraph}
 rm %{buildroot}%{_sysconfdir}/my.cnf.d/oqgraph.cnf
+%endif
+
+%if %{without mariabackup}
+rm %{buildroot}%{_bindir}/mariabackup
+rm %{buildroot}%{_bindir}/mbstream
 %endif
 
 %if %{without tokudb}
@@ -1112,9 +1183,10 @@ mysqld_safe mysqld_safe_helper replace resolve_stack_dump resolveip
 wsrep_sst_common wsrep_sst_mysqldump wsrep_sst_rsync
 wsrep_sst_xtrabackup wsrep_sst_xtrabackup-v2'
 
-mariadb_server_binaries_no_man='wsrep_sst_mariabackup mariabackup mbstream'
+mariadb_backup_binaries_no_man='wsrep_sst_mariabackup mariabackup mbstream'
 
-%scl_syspaths_install_wrappers -n mariadb-server -m script -p bin $mariadb_server_binaries $mariadb_server_binaries_no_man
+%scl_syspaths_install_wrappers -n mariadb-server -m script -p bin $mariadb_server_binaries
+%scl_syspaths_install_wrappers -n mariadb-backup -m script -p bin $mariadb_backup_binaries_no_man
 
 mans= ; for bin in $mariadb_server_binaries; do mans+=" man1/$bin.1.gz" ; done
 %scl_syspaths_install_wrappers -n mariadb-server -m link -p man $mans
@@ -1357,6 +1429,7 @@ fi
 %lang(fr) %{_datadir}/%{pkg_name}/french
 %lang(de) %{_datadir}/%{pkg_name}/german
 %lang(el) %{_datadir}/%{pkg_name}/greek
+%lang(hi) %{_datadir}/%{pkg_name}/hindi
 %lang(hu) %{_datadir}/%{pkg_name}/hungarian
 %lang(it) %{_datadir}/%{pkg_name}/italian
 %lang(ja) %{_datadir}/%{pkg_name}/japanese
@@ -1382,10 +1455,10 @@ fi
 %{_bindir}/galera_new_cluster
 %if %{with init_systemd}
 %{_bindir}/galera_recovery
-%{_datadir}/%{pkg_name}/systemd/use_galera_new_cluster.conf
 %endif
 %config(noreplace) %{_sysconfdir}/my.cnf.d/galera.cnf
 %attr(0640,root,root) %ghost %config(noreplace) %{_sysconfdir}/sysconfig/clustercheck
+%dir %{_datadir}/selinux/packages/%{name}
 %{_datadir}/selinux/packages/%{name}/%{name}-server-galera.pp
 %{_mandir}/man1/galera_new_cluster.1.*
 %{_mandir}/man1/galera_recovery.1.*
@@ -1399,11 +1472,9 @@ fi
 %{_bindir}/aria_ftdump
 %{_bindir}/aria_pack
 %{_bindir}/aria_read_log
-%{_bindir}/mariabackup
 %if %{with init_systemd}
 %{_bindir}/mariadb-service-convert
 %endif
-%{_bindir}/mbstream
 %{_bindir}/myisamchk
 %{_bindir}/myisam_ftdump
 %{_bindir}/myisamlog
@@ -1427,7 +1498,6 @@ fi
 %{?with_tokudb:%{_bindir}/tokuft_logprint}
 
 %config(noreplace) %{_sysconfdir}/my.cnf.d/%{pkg_name}-server.cnf
-%config(noreplace) %{_sysconfdir}/my.cnf.d/auth_gssapi.cnf
 %{?with_tokudb:%config(noreplace) %{_sysconfdir}/my.cnf.d/tokudb.cnf}
 
 # RocksDB engine
@@ -1453,6 +1523,9 @@ fi
 %{?with_connect:%exclude %{_libdir}/mysql/plugin/ha_connect.so}
 %exclude %{_libdir}/mysql/plugin/dialog.so
 %exclude %{_libdir}/mysql/plugin/mysql_clear_password.so
+%{?with_gssapi:%exclude %{_libdir}/mysql/plugin/auth_gssapi.so}
+%{?with_gssapi:%exclude %{_libdir}/mysql/plugin/auth_gssapi_client.so}
+%{?with_cracklib_password_check:%exclude %{_libdir}/mysql/plugin/cracklib_password_check.so}
 
 %{_mandir}/man1/aria_chk.1*
 %{_mandir}/man1/aria_dump_log.1*
@@ -1502,9 +1575,6 @@ fi
 %{_datadir}/%{pkg_name}/policy/selinux/README
 %{_datadir}/%{pkg_name}/policy/selinux/mariadb-server.*
 %{_datadir}/%{pkg_name}/policy/selinux/mariadb.*
-%if %{with init_systemd}
-%{_datadir}/%{pkg_name}/systemd/mariadb.service
-%endif
 
 %{daemondir}/%{daemon_name}*
 %{_libexecdir}/mysql-prepare-db-dir
@@ -1518,10 +1588,8 @@ fi
 %{?with_init_systemd:%{_tmpfilesdir}/%{name}.conf}
 %attr(0755,mysql,mysql) %dir %{pidfiledir}
 %attr(0755,mysql,mysql) %dir %{dbdatadir}
-%{?scl:%{_root_localstatedir}/lib/%{scl_prefix}mysql}
 %{?scl:%attr(0755,mysql,mysql) %dir /var/lib/mysql}
 %attr(0750,mysql,mysql) %dir %{logfiledir}
-%{?scl:%{_root_localstatedir}/log/%{scl_prefix}mariadb}
 %attr(0640,mysql,mysql) %config %ghost %verify(not md5 size mtime) %{logfile}
 %config(noreplace) %{logrotateddir}/%{daemon_name}
 
@@ -1537,6 +1605,26 @@ fi
 %files connect-engine
 %config(noreplace) %{_sysconfdir}/my.cnf.d/connect.cnf
 %{_libdir}/mysql/plugin/ha_connect.so
+%endif
+
+%if %{with mariabackup}
+%files backup
+%{_bindir}/mariabackup
+%{_bindir}/mbstream
+%endif
+
+%if %{with cracklib_password_check}
+%files cracklib-password-check
+%{_libdir}/mysql/plugin/cracklib_password_check.so
+%endif
+
+%if %{with gssapi}
+%files gssapi-client
+%{_libdir}/mysql/plugin/auth_gssapi_client.so
+
+%files gssapi-server
+%config(noreplace) %{_sysconfdir}/my.cnf.d/auth_gssapi.cnf
+%{_libdir}/mysql/plugin/auth_gssapi.so
 %endif
 
 %files server-utils
@@ -1605,12 +1693,42 @@ fi
 %if 0%{?scl:1}
 %scl_syspaths_files -n mariadb
 %scl_syspaths_files -n mariadb-config
+%scl_syspaths_files -n mariadb-backup
 %scl_syspaths_files -n mariadb-server
 %scl_syspaths_files -n mariadb-server-utils
 %scl_syspaths_files -n mariadb-server-galera
 %endif
-
 %changelog
+* Sun Sep 24 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.8-5
+- Support MYSQLD_OPTS and _WSREP_NEW_CLUSTER env vars in init script,
+  same as it is done in case of systemd unit file
+  Related: #1455850
+
+* Sat Sep 23 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.8-4
+- Fix issues found by rpmdiff, particularly:
+  unexpanded macro %{mysqld_pid_dir} -- left-over from switching pid file dir,
+  we can remove in new SCL
+  jar files included in connect engine
+  Related: #1455850
+
+* Wed Sep 20 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.8-3
+- Handle left-over files that do not uninstall
+  Resolves: #1487292
+- Fix uninstalled directories
+  Resolves: #1487292
+- Files outside of /opt/rh should be in syspath package
+  Resolves: #1492645
+- Split mariadb package to more sub-packages to match upstream's RPM list
+  Resolves: #1490419
+
+* Mon Aug 28 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.8-2
+- Support --defaults-group-suffix properly in systemd unit file
+  Resolves: #1485777
+- Run mysql-prepare-db-dir as non-root
+
+* Sun Aug 20 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.8-1
+- Rebase to 10.2.8
+
 * Wed Aug 09 2017 Honza Horak <hhorak@redhat.com> - 1:10.2.7-6
 - Re-enable tests
 

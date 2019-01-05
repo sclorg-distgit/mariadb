@@ -28,3 +28,6 @@ spider.ha                                    :
 spider.ha_part                               :
 spider.vp_fixes                              :
 
+perfschema.bad_option_1                      : bz#1462836
+perfschema.bad_option_5                      : bz#1462836
+

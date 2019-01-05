@@ -18,12 +18,22 @@ get_mysql_option(){
 	sections="$1"
 	option_name="$2"
 	default_value="$3"
-	result=`@bindir@/my_print_defaults $sections | sed -n "s/^--${option_name}=//p" | tail -n 1`
+	result=`@bindir@/my_print_defaults $my_print_defaults_extra_args $sections | sed -n "s/^--${option_name}=//p" | tail -n 1`
 	if [ -z "$result" ]; then
 	    # not found, use default
 	    result="${default_value}"
 	fi
 }
+
+# For the case of running more instances via systemd, scrits that source
+# this file can get --default-group-suffix or similar option as the first
+# argument. The utility my_print_defaults needs to use it as well, so the
+# scripts sourcing this file work with the same options as the daemon.
+my_print_defaults_extra_args=''
+while echo "$1" | grep -q '^--defaults' ; do
+	my_print_defaults_extra_args="${my_print_defaults_extra_args} $1"
+	shift
+done
 
 # Defaults here had better match what mysqld_safe will default to
 # The option values are generally defined on three important places
@@ -47,12 +57,12 @@ datadir="$result"
 # returns log-error
 # log-error might be defined in mysqld_safe and mysqld sections,
 # the former has bigger priority
-get_mysql_option "$server_sections" log-error "$datadir/`hostname`.err"
+get_mysql_option "$server_sections" log-error "$datadir/`uname -n`.err"
 errlogfile="$result"
 
 get_mysql_option "$server_sections" socket "@MYSQL_UNIX_ADDR@"
 socketfile="$result"
 
-get_mysql_option "$server_sections" pid-file "$datadir/`hostname`.pid"
+get_mysql_option "$server_sections" pid-file "$datadir/`uname -n`.pid"
 pidfile="$result"
 
